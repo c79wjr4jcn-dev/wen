@@ -455,7 +455,28 @@
             50% { transform: scale(1.06); opacity: 0.8; }
             100% { transform: scale(1); opacity: 1; }
         }
-    </style>
+    
+        /* Telefón: appka je pevná na celej obrazovke, nehýbe sa; v nastaveniach rolujú len nastavenia vnútri */
+        @media (max-width: 520px) {
+            html, body { position: fixed; inset: 0; width: 100%; height: 100%; overflow: hidden; overscroll-behavior: none; }
+            body { display: block; padding: 0; min-height: 0; }
+            .app-container {
+                width: 100%; max-width: none; height: 100%; max-height: none;
+                border: none; border-radius: 0; box-shadow: none;
+                padding: calc(10px + env(safe-area-inset-top)) 14px calc(10px + env(safe-area-inset-bottom));
+                overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+            }
+            .modal-header { position: sticky; top: -14px; z-index: 5; background: #241a1f; margin: -14px -14px 12px; padding: 14px 14px 8px; }
+        }
+
+        /* Jednoduchšia hlavná obrazovka */
+        #coach-insight { display: none; }
+        .feedback-box:empty { display: none; }
+        .manual-check-row { display: none; }
+        body.show-manual .manual-check-row { display: block; }
+        body.info-card #screen-trainer .trainer-card ~ div { display: none; }
+        .card-hint:empty { display: none; }
+</style>
 </head>
 <body>
 
@@ -518,6 +539,15 @@
                 <div id="reminder-status" style="font-size:0.68rem; color:var(--text-muted); line-height:1.4; margin-top:2px;"></div>
             </div>
             <div class="settings-section">
+                <div class="ai-dict-box">
+            <h4>💡 Vlastná veta</h4>
+            <div class="dict-input-row">
+                <input type="text" id="dict-word-input" placeholder="slovensky = anglicky">
+                <button onclick="askAIDictionary()">Pridať vetu</button>
+            </div>
+        </div>
+            </div>
+            <div class="settings-section">
                 <h4>💾 Záloha pokroku</h4>
                 <div class="action-row">
                     <button class="secondary-btn" onclick="createBackup()">Vytvoriť zálohu</button>
@@ -541,13 +571,6 @@
     </div>
 
     <div id="screen-trainer" class="screen">
-        <div class="ai-dict-box">
-            <h4>💡 Vlastná veta</h4>
-            <div class="dict-input-row">
-                <input type="text" id="dict-word-input" placeholder="slovensky = anglicky">
-                <button onclick="askAIDictionary()">Pridať vetu</button>
-            </div>
-        </div>
 
         <div class="trainer-card" id="trainer-card">
             <div id="card-content">Načítavam tvoj inteligentný plán...</div>
@@ -559,7 +582,7 @@
             <div id="dictation-row" class="dictation-row">
                 <div id="dictation-note" style="font-size:0.72rem; color:var(--text-muted); text-align:center; margin-bottom:6px;">Alebo klepni sem a nadiktuj cez 🎤 na klávesnici:</div>
                 <div class="dictation-input-row">
-                    <input type="text" id="dictation-input" placeholder="Klepni sem a nadiktuj alebo napíš..." autocomplete="off" autocorrect="off" autocapitalize="off" enterkeyhint="send">
+                    <input type="text" id="dictation-input" placeholder="Sem nadiktuj vetu…" autocomplete="off" autocorrect="off" autocapitalize="off" enterkeyhint="send">
                     <button class="secondary-btn" onclick="checkDictation()">Skontrolovať</button>
                 </div>
             </div>
@@ -567,7 +590,7 @@
             <div class="feedback-box" id="feedback-box">Pripravené...</div>
 
             <div class="manual-check-row">
-                <div style="font-size:0.7rem; color:var(--text-muted); margin-bottom:6px; text-align:center;">Mikrofón nepočul dobre? Over sa sám/sama:</div>
+                <div style="font-size:0.7rem; color:var(--text-muted); margin-bottom:6px; text-align:center;">Zle sa to prepísalo? Rozhodni sama:</div>
                 <div class="action-row">
                     <button class="secondary-btn" style="color:var(--success); border-color:var(--success);" onclick="manualSelfAssess(true)">✅ Povedal/a som správne</button>
                     <button class="secondary-btn" onclick="manualSelfAssess(false)">🔁 Skúsim znova</button>
@@ -1008,8 +1031,11 @@
     function setFeedback(cls, text) {
         const fb = document.getElementById('feedback-box');
         if (!fb) return;
+        if (text === 'Pripravené...') text = '';
         fb.className = cls ? 'feedback-box ' + cls : 'feedback-box';
         fb.innerText = text;
+        if (cls === 'fail' || cls === 'warning') document.body.classList.add('show-manual');
+        else if (!cls) document.body.classList.remove('show-manual');
     }
 
     // ===== Rozložené opakovanie =====
@@ -1146,6 +1172,14 @@
     let isListening = false;
     // iPhone: vstavané rozpoznávanie reči vo webe nie je spoľahlivé -> vždy diktovanie cez 🎤 na klávesnici
     // (to je systémové diktovanie iOS, nepýta sa na žiadne povolenie).
+    function syncControls() {
+        const cc = document.getElementById('card-content');
+        document.body.classList.toggle('info-card', !!cc && !cc.querySelector('#target-box'));
+    }
+    document.addEventListener('DOMContentLoaded', () => {
+        const cc = document.getElementById('card-content');
+        if (cc) { new MutationObserver(syncControls).observe(cc, { childList: true }); syncControls(); }
+    });
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     const sttSupported = !isIOS && !!(window.SpeechRecognition || window.webkitSpeechRecognition);
 
@@ -1250,7 +1284,7 @@
             const micBtn = document.getElementById('mic-btn');
             if (micBtn) micBtn.style.display = 'none';
             const note = document.getElementById('dictation-note');
-            if (note) note.innerText = isIOS ? 'Prepni klávesnicu na angličtinu (🌐), ťukni na 🎤 a povedz vetu. Potom Enter alebo Skontrolovať:' : 'Vstavané rozpoznávanie hlasu tu nie je podporované. Klepni sem a nadiktuj cez 🎤 na klávesnici:';
+            if (note) note.innerText = isIOS ? 'Klávesnica 🌐 angličtina → 🎤 → povedz vetu' : 'Vstavané rozpoznávanie hlasu tu nie je podporované. Klepni sem a nadiktuj cez 🎤 na klávesnici:';
         }
         const dictationInput = document.getElementById('dictation-input');
         if (dictationInput) {
@@ -1722,12 +1756,12 @@
                     <div class="card-tag">${esc(dots + ltitle)}</div>
                     <div class="sk-sentence">🇸🇰 ${esc(item.sk)}</div>
                     <div class="slang-box" id="target-box">🇺🇸 <span id="words-container">${wrappedWords}</span></div>
-                    <div class="card-hint" id="card-hint">${isIOS ? 'Povedz vetu cez 🎤 na klávesnici:' : 'Preložte vetu do mikrofónu:'}</div>
+                    <div class="card-hint" id="card-hint">${isIOS ? '' : 'Preložte vetu do mikrofónu:'}</div>
                 `;
             } else if (trainingStep === 'isolated_word') {
                 document.getElementById('card-content').innerHTML = `
                     <div class="isolated-word-box" id="target-box"><span class="word" id="word-0">${wrapLetters(currentFailedWord)}</span></div>
-                    <div style="font-size: 0.75rem; color: var(--text-muted); margin-top:2px;">Prečítajte len toto slovo do mikrofónu:</div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted); margin-top:2px;">Povedz len toto slovo:</div>
                 `;
             }
         }
