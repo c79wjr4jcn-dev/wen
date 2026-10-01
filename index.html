@@ -476,6 +476,12 @@
         body.show-manual .manual-check-row { display: block; }
         body.info-card #screen-trainer .trainer-card ~ div { display: none; }
         .card-hint:empty { display: none; }
+
+        /* Mikrofón ako v starej verzii; klávesnica len ako záloha */
+        .kb-link { display: none; background: none; border: none; color: var(--text-muted); font-size: 0.72rem; margin: 0 auto 2px; padding: 2px 8px; cursor: pointer; }
+        body.stt .kb-link { display: block; }
+        body.stt .dictation-row { display: none; }
+        body.stt.show-kb .dictation-row { display: block; }
 </style>
 </head>
 <body>
@@ -530,7 +536,9 @@
                 <div id="lesson-overview"></div>
             </div>
             <div class="settings-section">
-                <div class="settings-row"><span>Mikrofón:</span><span id="mic-status" style="color:var(--text-muted); font-size:0.75rem;">—</span></div>
+                <div class="settings-row"><span>Mikrofón sa zapne sám po prečítaní vety:</span><input type="checkbox" id="setting-automic" onchange="saveSettings()" checked></div>
+                <div class="settings-row"><span>Mikrofón:</span><button class="secondary-btn" style="padding:6px 12px;" onclick="testMic()">Vyskúšať mikrofón</button></div>
+                <div id="mic-status" style="color:var(--text-muted); font-size:0.75rem; line-height:1.4;">—</div>
             </div>
             <div class="settings-section">
                 <h4>🔔 Pripomienka na učenie</h4>
@@ -578,7 +586,7 @@
 
         <div>
             <button class="mic-main-btn" id="mic-btn" onclick="toggleSpeech()">🎤</button>
-
+            <button class="kb-link" id="kb-link" onclick="toggleKeyboardRow()">⌨️ klávesnica</button>
             <div id="dictation-row" class="dictation-row">
                 <div id="dictation-note" style="font-size:0.72rem; color:var(--text-muted); text-align:center; margin-bottom:6px;">Alebo klepni sem a nadiktuj cez 🎤 na klávesnici:</div>
                 <div class="dictation-input-row">
@@ -989,7 +997,7 @@
     }
     function writeJSON(k, v) { try { store.set(k, JSON.stringify(v)); } catch (e) {} }
 
-    const DEFAULT_SETTINGS = { style: 'casual', showOthers: true, tracks: { tense: true, topic: true, slang: true }, autoNext: true, voiceName: '', rate: '1.0', reminderEnabled: false, reminderTime: '18:00' };
+    const DEFAULT_SETTINGS = { style: 'casual', showOthers: true, autoMic: true, tracks: { tense: true, topic: true, slang: true }, autoNext: true, voiceName: '', rate: '1.0', reminderEnabled: false, reminderTime: '18:00' };
     function normalizeSettings(s) {
         s = (s && typeof s === 'object' && !Array.isArray(s)) ? s : {};
         const out = Object.assign({}, DEFAULT_SETTINGS, s);
@@ -1034,7 +1042,7 @@
         if (text === 'Pripravené...') text = '';
         fb.className = cls ? 'feedback-box ' + cls : 'feedback-box';
         fb.innerText = text;
-        if (cls === 'fail' || cls === 'warning') document.body.classList.add('show-manual');
+        if (cls === 'fail' || (cls === 'warning' && !/^Počúvam/.test(text))) document.body.classList.add('show-manual');
         else if (!cls) document.body.classList.remove('show-manual');
     }
 
@@ -1181,7 +1189,18 @@
         if (cc) { new MutationObserver(syncControls).observe(cc, { childList: true }); syncControls(); }
     });
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-    const sttSupported = !isIOS && !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+    const sttSupported = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+    let micFailed = false;      // mikrofón na tomto zariadení naozaj nejde -> ukáže sa klávesnica
+    let micTest = false;        // beží "Vyskúšať mikrofón" v nastaveniach
+    let autoStarted = false;
+    let suppressEnd = false;
+    let hadError = false;    // zrušené počúvanie (ďalšia veta, prehrať) sa nevyhodnocuje    // posledné spustenie bolo automatické (po prečítaní vety)
+    function toggleKeyboardRow(force) {
+        const on = force === undefined ? !document.body.classList.contains('show-kb') : !!force;
+        document.body.classList.toggle('show-kb', on);
+        if (on) { const i = document.getElementById('dictation-input'); if (i) try { i.focus({ preventScroll: true }); } catch (e) {} }
+    }
+    function micUsable() { return sttSupported && !micFailed && !!recognition; }
 
     // Nativny <details>/<summary> - prehliadač sám vie rozbaliť/zabaliť obsah
     // na kliknutie, žiadna vlastná JS logika na otváranie/zatváranie, ktorá by
@@ -1280,11 +1299,12 @@
         // Diktovacie políčko je vždy dostupné ako alternatíva - vstavané rozpoznávanie reči
         // (najmä na iPhone, aj v Chrome, aj v Safari) sa v praxi nespráva vždy rovnako spoľahlivo,
         // takže sa naň nedá vždy spoľahnúť len podľa toho, či prehliadač API ponúka.
+        if (sttSupported) document.body.classList.add('stt');
         if (!sttSupported) {
             const micBtn = document.getElementById('mic-btn');
             if (micBtn) micBtn.style.display = 'none';
             const note = document.getElementById('dictation-note');
-            if (note) note.innerText = isIOS ? 'Klávesnica 🌐 angličtina → 🎤 → povedz vetu' : 'Vstavané rozpoznávanie hlasu tu nie je podporované. Klepni sem a nadiktuj cez 🎤 na klávesnici:';
+            if (note) note.innerText = 'Klávesnica 🌐 angličtina → 🎤 na klávesnici → povedz vetu';
         }
         const dictationInput = document.getElementById('dictation-input');
         if (dictationInput) {
@@ -1319,8 +1339,11 @@
 
         recognition.onstart = () => {
             __recognitionTranscript = "";
+            suppressEnd = false;
+            hadError = false;
             isListening = true;
             store.set('qen_mic_ok', '1');
+            if (micTest) { const st = document.getElementById('mic-status'); if (st) st.textContent = 'Počúvam… povedz po anglicky napríklad „Hello, how are you?“'; return; }
             updateMicStatus();
             const micBtn = document.getElementById('mic-btn');
             if (micBtn) { micBtn.classList.add('listening'); micBtn.innerText = '⏹️'; }
@@ -1328,6 +1351,12 @@
         };
 
         recognition.onresult = (e) => {
+            if (micTest) {
+                let t = ''; for (let i = 0; i < e.results.length; ++i) t += e.results[i][0].transcript;
+                __recognitionTranscript = t;
+                const st = document.getElementById('mic-status'); if (st) st.textContent = 'Počujem: ' + t;
+                return;
+            }
             const item = sessionPhrases[currentIndex];
             if (!item || item.isRule) return;
             const singleWord = item.isJustWord || trainingStep === 'isolated_word';
@@ -1368,15 +1397,39 @@
 
         recognition.onerror = (e) => {
             stopListeningState();
-            // Ak mikrofón na tomto zariadení/prehliadači zlyhá pri reálnom použití (bežné na iPhone,
-            // aj keď API "existuje"), nasmerujeme používateľa na diktovacie políčko namiesto ticha.
-            if (e && (e.error === 'not-allowed' || e.error === 'service-not-allowed' || e.error === 'network' || e.error === 'audio-capture')) {
-                setFeedback('warning', 'Mikrofón sa nepodarilo použiť. Skús diktovacie políčko nižšie (🎤 na klávesnici).');
+            const err = e && e.error;
+            if (err !== 'no-speech') hadError = true;
+            if (micTest) {
+                micTest = false;
+                const st = document.getElementById('mic-status');
+                if (st) st.textContent = (err === 'not-allowed' || err === 'service-not-allowed')
+                    ? 'Mikrofón nie je povolený ❌ iPhone: Nastavenia → Chrome → zapni Mikrofón a Rozpoznávanie reči. Potom appku zavri a otvor znova.'
+                    : 'Mikrofón nefunguje (' + (err || 'chyba') + '). Používaj ⌨️ klávesnicu.';
+                return;
+            }
+            if (err === 'no-speech' || err === 'aborted') return;
+            if (autoStarted && err === 'not-allowed') { setFeedback('', ''); return; } // automatický štart bez ťuknutia iPhone niekedy nedovolí - stačí ťuknúť na 🎤
+            if (err === 'not-allowed' || err === 'service-not-allowed' || err === 'audio-capture') {
+                micFailed = true;
+                toggleKeyboardRow(true);
+                setFeedback('warning', 'Mikrofón nejde. Diktuj cez klávesnicu nižšie, alebo skontroluj Nastavenia → Vyskúšať mikrofón.');
+            } else if (err === 'network') {
+                setFeedback('warning', 'Rozpoznávanie reči potrebuje teraz internet. Skús znova alebo použi ⌨️ klávesnicu.');
             }
         };
 
         recognition.onend = () => {
             stopListeningState();
+            if (suppressEnd) { suppressEnd = false; __recognitionTranscript = ''; return; }
+            if (hadError) { hadError = false; return; }
+            if (micTest) {
+                micTest = false;
+                const st = document.getElementById('mic-status');
+                if (st) st.textContent = __recognitionTranscript.trim() ? 'Funguje ✅ Počul som: „' + __recognitionTranscript.trim() + '“' : 'Nič som nepočul. Skús znova a hovor hlasnejšie.';
+                return;
+            }
+            const cur = sessionPhrases[currentIndex];
+            if (!cur || cur.isRule) return;
             if (__recognitionTranscript.trim().length > 0) {
                 if (trainingStep === 'isolated_word') {
                     evaluateIsolatedWord(__recognitionTranscript);
@@ -1389,15 +1442,39 @@
         };
     }
 
-    function startListening() {
+    function startListening(auto) {
         if (!recognition) return;
+        autoStarted = !!auto;
         try { recognition.start(); } catch (err) { /* uz bezi, ignorujeme */ }
+    }
+    function stopListeningNow() {
+        if (recognition && isListening) { suppressEnd = true; try { recognition.abort(); } catch (e) {} }
+        stopListeningState();
+    }
+    function testMic() {
+        const st = document.getElementById('mic-status');
+        if (!sttSupported || !recognition) { if (st) st.textContent = 'Tento prehliadač webový mikrofón nepodporuje. Používaj ⌨️ klávesnicu.'; return; }
+        stopSpeaking();
+        stopListeningNow();
+        micTest = true;
+        micFailed = false;
+        if (st) st.textContent = 'Spúšťam mikrofón… (ak sa iPhone spýta, ťukni na Povoliť)';
+        setTimeout(() => startListening(false), 150);
+    }
+    // Po prečítaní vety sa mikrofón zapne sám (ak je to zapnuté v nastaveniach)
+    function autoListenAfterSpeak(tries) {
+        if (userState.settings.autoMic === false || !micUsable() || isListening) return;
+        if (isTransitioning) { if ((tries || 0) < 15) setTimeout(() => autoListenAfterSpeak((tries || 0) + 1), 200); return; }
+        const cur = sessionPhrases[currentIndex];
+        if (!cur || cur.isRule) return;
+        if (!document.getElementById('screen-trainer').classList.contains('active')) return;
+        if (document.getElementById('settings-modal').open) return;
+        setTimeout(() => { if (!isListening && !isTransitioning) startListening(true); }, 250);
     }
 
     function updateMicStatus() {
         const el = document.getElementById('mic-status');
         if (!el) return;
-        if (isIOS) { el.textContent = 'Na iPhone diktuješ cez 🎤 na klávesnici - povolenie netreba.'; return; }
         if (!sttSupported) { el.textContent = 'Nepodporovaný na tomto zariadení - použi diktovanie cez klávesnicu.'; return; }
         if (store.get('qen_mic_ok', '') === '1') { el.textContent = 'Povolený ✅'; return; }
         if (navigator.permissions && navigator.permissions.query) {
@@ -1756,7 +1833,7 @@
                     <div class="card-tag">${esc(dots + ltitle)}</div>
                     <div class="sk-sentence">🇸🇰 ${esc(item.sk)}</div>
                     <div class="slang-box" id="target-box">🇺🇸 <span id="words-container">${wrappedWords}</span></div>
-                    <div class="card-hint" id="card-hint">${isIOS ? '' : 'Preložte vetu do mikrofónu:'}</div>
+                    <div class="card-hint" id="card-hint"></div>
                 `;
             } else if (trainingStep === 'isolated_word') {
                 document.getElementById('card-content').innerHTML = `
@@ -1785,7 +1862,8 @@
     }
 
     function speakCurrentPhrase() {
-        if (!('speechSynthesis' in window)) return;
+        if (!('speechSynthesis' in window)) { autoListenAfterSpeak(0); return; }
+        stopListeningNow();
         stopSpeaking();
 
         const item = sessionPhrases[currentIndex];
@@ -1826,6 +1904,7 @@
         utterance.onend = () => {
             if (box) box.classList.remove('speaking');
             wordSpans.forEach(w => { w.classList.remove('tts-active'); w.classList.remove('tts-read'); });
+            autoListenAfterSpeak(0);
         };
 
         utterance.onerror = () => {
@@ -1864,9 +1943,8 @@
         if (cur && cur.isRule) return;
         stopSpeaking();
 
-        if (!sttSupported) {
-            const input = document.getElementById('dictation-input');
-            if (input) input.focus();
+        if (!sttSupported || micFailed) {
+            toggleKeyboardRow(true);
             return;
         }
 
@@ -2247,7 +2325,7 @@
         setFeedback('success', 'Pridané ✅ Príde v ďalšom bloku.');
     }
 
-    function openSettings() { document.getElementById('settings-modal').open = true; syncSettingsUI(); }
+    function openSettings() { stopListeningNow(); document.getElementById('settings-modal').open = true; syncSettingsUI(); }
     function closeSettings() { document.getElementById('settings-modal').open = false; }
     function updateProfileName(name) { if (name) { userState.name = name; store.set('qen_name', name); } }
     
@@ -2331,6 +2409,7 @@
         const s = userState.settings;
         s.style = document.getElementById('setting-style').value;
         s.showOthers = document.getElementById('setting-others').checked;
+        s.autoMic = document.getElementById('setting-automic').checked;
         const tr = {
             tense: document.getElementById('track-tense').checked,
             topic: document.getElementById('track-topic').checked,
@@ -2352,6 +2431,7 @@
         const rateSel = document.getElementById('setting-rate');
         styleSel.value = s.style;
         document.getElementById('setting-others').checked = !!s.showOthers;
+        document.getElementById('setting-automic').checked = s.autoMic !== false;
         document.getElementById('track-tense').checked = s.tracks.tense !== false;
         document.getElementById('track-topic').checked = s.tracks.topic !== false;
         document.getElementById('track-slang').checked = s.tracks.slang !== false;
