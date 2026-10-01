@@ -479,9 +479,22 @@
 
         /* Mikrofón ako v starej verzii; klávesnica len ako záloha */
         .kb-link { display: none; background: none; border: none; color: var(--text-muted); font-size: 0.72rem; margin: 0 auto 2px; padding: 2px 8px; cursor: pointer; }
-        body.stt .kb-link { display: block; }
+        
         body.stt .dictation-row { display: none; }
         body.stt.show-kb .dictation-row { display: block; }
+
+        .mic-main-btn.nudge { animation: pulse 1.1s ease-in-out infinite; box-shadow: 0 0 0 4px rgba(214,143,168,0.45); }
+
+        .style-help { font-size: 0.7rem; color: var(--text-muted); line-height: 1.45; margin: -2px 0 10px; }
+        .style-help .sh-intro { margin-bottom: 3px; }
+        .style-help .sh-row { padding: 2px 8px; border-radius: 8px; }
+        .style-help .sh-row.on { background: rgba(214,143,168,0.16); color: var(--text-main); }
+
+        /* Nič sa nesmie posúvať do strán */
+        html, body { overflow-x: hidden; touch-action: pan-y; }
+        .app-container { overflow-x: hidden; touch-action: pan-y; }
+        .app-container * { max-width: 100%; }
+        #mic-log, .alt, .done-text, .rule-text { overflow-wrap: anywhere; }
 </style>
 </head>
 <body>
@@ -517,6 +530,12 @@
                         <option value="original">Originál</option><option value="casual" selected>Hovorová</option><option value="slang">Slang</option>
                     </select>
                 </div>
+                <div class="style-help" id="style-help">
+                    <div class="sh-intro">V akej podobe sa učíš každú vetu (vo všetkých lekciách). Napríklad „Nepozerám veľa televízie":</div>
+                    <div class="sh-row" data-s="original"><b>Originál:</b> I do not watch much TV.</div>
+                    <div class="sh-row" data-s="casual"><b>Hovorová:</b> I don't watch a lot of TV.</div>
+                    <div class="sh-row" data-s="slang"><b>Slang:</b> I'm not really into TV.</div>
+                </div>
                 <div class="settings-row"><span>Ukázať ostatné štýly po vete:</span><input type="checkbox" id="setting-others" onchange="saveSettings()" checked></div>
                 <div class="settings-row"><span>Hlas:</span><select id="setting-voice" onchange="saveSettings()"><option value="">Predvolený</option></select></div>
                 <div class="settings-row"><span>Rýchlosť:</span>
@@ -527,6 +546,7 @@
             </div>
             <div class="settings-section">
                 <h4>📚 Čo trénovať</h4>
+                <div class="style-help"><div class="sh-intro">Z ktorých lekcií prichádzajú <b>nové</b> vety. Vety, ktoré už poznáš, sa na opakovanie vracajú vždy. Chceš hlavne slang? Nechaj zaškrtnuté všetko a štýl vety daj na Slang.</div></div>
                 <div class="settings-row"><span>Časy (prítomný, minulý, budúci):</span><input type="checkbox" id="track-tense" onchange="saveSettings()" checked></div>
                 <div class="settings-row"><span>Bežný život:</span><input type="checkbox" id="track-topic" onchange="saveSettings()" checked></div>
                 <div class="settings-row"><span>Slang a hovorové výrazy:</span><input type="checkbox" id="track-slang" onchange="saveSettings()" checked></div>
@@ -539,6 +559,8 @@
                 <div class="settings-row"><span>Mikrofón sa zapne sám po prečítaní vety:</span><input type="checkbox" id="setting-automic" onchange="saveSettings()" checked></div>
                 <div class="settings-row"><span>Mikrofón:</span><button class="secondary-btn" style="padding:6px 12px;" onclick="testMic()">Vyskúšať mikrofón</button></div>
                 <div id="mic-status" style="color:var(--text-muted); font-size:0.75rem; line-height:1.4;">—</div>
+                <details style="margin-top:6px;"><summary style="font-size:0.72rem; color:var(--text-muted); cursor:pointer;">Denník mikrofónu</summary>
+                    <pre id="mic-log" style="font-size:0.66rem; color:var(--text-muted); white-space:pre-wrap; margin-top:4px;">—</pre></details>
             </div>
             <div class="settings-section">
                 <h4>🔔 Pripomienka na učenie</h4>
@@ -586,7 +608,7 @@
 
         <div>
             <button class="mic-main-btn" id="mic-btn" onclick="toggleSpeech()">🎤</button>
-            <button class="kb-link" id="kb-link" onclick="toggleKeyboardRow()">⌨️ klávesnica</button>
+            <div id="mic-nudge" style="display:none; text-align:center; font-size:0.78rem; color:var(--accent); margin:2px 0;">Ťukni na 🎤 a povedz vetu</div>
             <div id="dictation-row" class="dictation-row">
                 <div id="dictation-note" style="font-size:0.72rem; color:var(--text-muted); text-align:center; margin-bottom:6px;">Alebo klepni sem a nadiktuj cez 🎤 na klávesnici:</div>
                 <div class="dictation-input-row">
@@ -1083,7 +1105,8 @@
         if (a) a.innerText = `🎓 Naučené: ${m} / ${total}`;
         if (bar) bar.style.width = `${pct}%`;
         const d = dueCount();
-        if (b) b.innerText = `${pct}%` + (d > 0 ? ` · na opakovanie ${d}` : '');
+        const dd = dayState().done;
+        if (b) b.innerText = `Dnes ${dd} / ${DAY_GOAL}` + (dd >= DAY_GOAL ? ' 🌸' : '');
     }
 
     // Prechod zo starého bodovania (mastery 0/1/2) na priehradky.
@@ -1200,7 +1223,7 @@
         document.body.classList.toggle('show-kb', on);
         if (on) { const i = document.getElementById('dictation-input'); if (i) try { i.focus({ preventScroll: true }); } catch (e) {} }
     }
-    function micUsable() { return sttSupported && !micFailed && !!recognition; }
+    function micUsable() { return sttSupported && !micFailed; }
 
     // Nativny <details>/<summary> - prehliadač sám vie rozbaliť/zabaliť obsah
     // na kliknutie, žiadna vlastná JS logika na otváranie/zatváranie, ktorá by
@@ -1328,16 +1351,22 @@
     // pri každom kliknutí spôsobovalo, že si niektoré prehliadače pýtali povolenie
     // znova a znova - takto sa prehliadač spýta naozaj len raz.
     function initSpeechRecognitionOnce() {
+        if (!sttSupported) return;
+        recognition = createRecognition();
+    }
+    // Nová inštancia mikrofónu. Na iPhone sa robí nová pre každé počúvanie (opakované spustenie tej istej
+    // inštancie tam po prvej vete nič nepočuje). Udalosti starej inštancie sa ignorujú.
+    function createRecognition() {
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!SpeechRecognition) return;
+        const rec = new SpeechRecognition();
+        rec.lang = 'en-US';
+        rec.interimResults = true;
+        rec.continuous = false;
+        rec.maxAlternatives = 5;
 
-        recognition = new SpeechRecognition();
-        recognition.lang = 'en-US';
-        recognition.interimResults = true;
-        recognition.continuous = false;
-        recognition.maxAlternatives = 5;
-
-        recognition.onstart = () => {
+        rec.onstart = () => {
+            if (rec !== recognition) return;
+            micLogAdd('zapnutý'); armWatchdog();
             __recognitionTranscript = "";
             suppressEnd = false;
             hadError = false;
@@ -1350,7 +1379,9 @@
             setFeedback('warning', (trainingStep === 'isolated_word' || (sessionPhrases[currentIndex] && sessionPhrases[currentIndex].isJustWord)) ? 'Počúvam slovo...' : 'Počúvam... Čítajte pomaly.');
         };
 
-        recognition.onresult = (e) => {
+        rec.onresult = (e) => {
+            if (rec !== recognition) return;
+            clearWatchdog(); micLogAdd('text: ' + (e.results[e.results.length - 1][0].transcript || ''));
             if (micTest) {
                 let t = ''; for (let i = 0; i < e.results.length; ++i) t += e.results[i][0].transcript;
                 __recognitionTranscript = t;
@@ -1391,13 +1422,16 @@
                 : bestMatch(targetWordsForMatch, __recognitionTranscript).targetMask.every(Boolean);
 
             if (e.results[e.results.length - 1].isFinal || fullyMatched) {
-                recognition.stop();
+                rec.stop();
             }
         };
 
-        recognition.onerror = (e) => {
+        rec.onerror = (e) => {
+            if (rec !== recognition) return;
+            micLogAdd('chyba: ' + (e && e.error));
             stopListeningState();
             const err = e && e.error;
+            clearWatchdog();
             if (err !== 'no-speech') hadError = true;
             if (micTest) {
                 micTest = false;
@@ -1408,7 +1442,7 @@
                 return;
             }
             if (err === 'no-speech' || err === 'aborted') return;
-            if (autoStarted && err === 'not-allowed') { setFeedback('', ''); return; } // automatický štart bez ťuknutia iPhone niekedy nedovolí - stačí ťuknúť na 🎤
+            if (autoStarted && err === 'not-allowed') { setFeedback('', ''); setMicNudge(true); return; } // automatický štart bez ťuknutia iPhone niekedy nedovolí - stačí ťuknúť na 🎤
             if (err === 'not-allowed' || err === 'service-not-allowed' || err === 'audio-capture') {
                 micFailed = true;
                 toggleKeyboardRow(true);
@@ -1418,7 +1452,9 @@
             }
         };
 
-        recognition.onend = () => {
+        rec.onend = () => {
+            if (rec !== recognition) return;
+            clearWatchdog(); micLogAdd('koniec');
             stopListeningState();
             if (suppressEnd) { suppressEnd = false; __recognitionTranscript = ''; return; }
             if (hadError) { hadError = false; return; }
@@ -1437,23 +1473,68 @@
                     evaluateSpeech(__recognitionTranscript);
                 }
             } else {
-                setFeedback('warning', 'Nič som nezachytil. Skús znova, alebo sa ohodnoť manuálne nižšie.');
+                setFeedback('', '');
+                setMicNudge(true);
             }
         };
+        rec.onaudiostart = () => { if (rec === recognition) micLogAdd('počuje zvuk'); };
+        rec.onspeechstart = () => { if (rec === recognition) micLogAdd('počuje reč'); };
+        return rec;
     }
 
     function startListening(auto) {
-        if (!recognition) return;
+        if (!sttSupported) return;
         autoStarted = !!auto;
-        try { recognition.start(); } catch (err) { /* uz bezi, ignorujeme */ }
+        setMicNudge(false);
+        if (isIOS || !recognition) {
+            // iPhone: vždy nová inštancia; stará (ak ešte beží) sa zruší a jej udalosti sa ignorujú
+            const old = recognition;
+            recognition = createRecognition();
+            if (old) { try { old.abort(); } catch (e) {} }
+        }
+        micLogAdd(auto ? 'štart (sám)' : 'štart (ťuknutie)');
+        try { recognition.start(); } catch (err) { micLogAdd('štart zlyhal: ' + (err && err.message || err)); }
     }
     function stopListeningNow() {
-        if (recognition && isListening) { suppressEnd = true; try { recognition.abort(); } catch (e) {} }
+        clearWatchdog();
+        if (recognition && isListening) {
+            if (isIOS) { const old = recognition; recognition = null; try { old.abort(); } catch (e) {} }
+            else { suppressEnd = true; try { recognition.abort(); } catch (e) {} }
+        }
         stopListeningState();
+    }
+    // Poistka: ak mikrofón do 6 s nič nezachytí, vypne sa a 🎤 zabliká (nečaká sa donekonečna na "hluchý" mikrofón)
+    let micWatchdog = null;
+    function armWatchdog() {
+        clearWatchdog();
+        if (micTest) return;
+        micWatchdog = setTimeout(() => {
+            micWatchdog = null;
+            if (!isListening || (__recognitionTranscript || '').trim()) return;
+            micLogAdd('nič nepočul 6 s → vypnutý');
+            stopListeningNow();
+            setMicNudge(true);
+            setFeedback('', '');
+        }, 6000);
+    }
+    function clearWatchdog() { if (micWatchdog) { clearTimeout(micWatchdog); micWatchdog = null; } }
+    function setMicNudge(on) {
+        const b = document.getElementById('mic-btn');
+        if (b) b.classList.toggle('nudge', !!on);
+        const k = document.getElementById('mic-nudge');
+        if (k) k.style.display = on ? 'block' : 'none';
+    }
+    const micLog = [];
+    function micLogAdd(t) {
+        const d = new Date();
+        micLog.push(String(d.getMinutes()).padStart(2, '0') + ':' + String(d.getSeconds()).padStart(2, '0') + ' ' + t);
+        while (micLog.length > 14) micLog.shift();
+        const el = document.getElementById('mic-log');
+        if (el) el.textContent = micLog.join('\n');
     }
     function testMic() {
         const st = document.getElementById('mic-status');
-        if (!sttSupported || !recognition) { if (st) st.textContent = 'Tento prehliadač webový mikrofón nepodporuje. Používaj ⌨️ klávesnicu.'; return; }
+        if (!sttSupported) { if (st) st.textContent = 'Tento prehliadač webový mikrofón nepodporuje. Používaj ⌨️ klávesnicu.'; return; }
         stopSpeaking();
         stopListeningNow();
         micTest = true;
@@ -1469,7 +1550,7 @@
         if (!cur || cur.isRule) return;
         if (!document.getElementById('screen-trainer').classList.contains('active')) return;
         if (document.getElementById('settings-modal').open) return;
-        setTimeout(() => { if (!isListening && !isTransitioning) startListening(true); }, 250);
+        setTimeout(() => { if (!isListening && !isTransitioning) startListening(true); }, isIOS ? 700 : 250);
     }
 
     function updateMicStatus() {
@@ -1502,8 +1583,9 @@
 
     // ===== Plán učenia (lekcie, denná dávka, brzda) =====
     const REVIEW_CAP = 15;     // najviac opakovaní za deň (odladené simuláciou: pri 12 sa dlh hromadil)
-    const NEW_QUOTA = 5;       // nových viet za deň
-    const REVIEW_EXTRA = 8;    // o koľko viac opakovaní pri "Mám dnes viac času"
+    const NEW_QUOTA = 10;       // nových viet za deň
+    const REVIEW_EXTRA = 8;
+    const DAY_GOAL = 20;       // denný cieľ (len informácia hore, učenie pokračuje aj po ňom)    // o koľko viac opakovaní pri "Mám dnes viac času"
     const STYLE_LABEL = { original: 'Originál', casual: 'Hovorová', slang: 'Slang' };
 
     function planGet() {
@@ -1514,7 +1596,8 @@
     function savePlan() { writeJSON('qen_plan', userState.plan); }
     function dayState() {
         const p = planGet(), d = dayIndex();
-        if (!p.day || p.day.d !== d) p.day = { d: d, rev: 0, neu: 0, extra: 0 };
+        if (!p.day || p.day.d !== d) p.day = { d: d, rev: 0, neu: 0, extra: 0, done: 0, goal: false };
+        if (p.day.done === undefined) p.day.done = 0;
         return p.day;
     }
     function reviewCap() { return REVIEW_CAP + REVIEW_EXTRA * dayState().extra; }
@@ -1618,6 +1701,13 @@
                 }
             }
             if (!list.length && opts.more) { practiceMode = true; list = practiceList(); }
+            if (!list.length) {
+                // Denná dávka je hotová -> žiadna otázka, plynule ďalej
+                if (!day.goal) { day.goal = true; pendingNotice = 'Denný cieľ splnený 🌸 Môžeš pokračovať, alebo appku kľudne zavri.'; }
+                if (day.extra < 2 && !brakeOn() && freshItems().length) { day.extra++; savePlan(); return generateNextSession(opts); }
+                practiceMode = true;
+                list = practiceList();
+            }
             savePlan();
         }
         list.forEach(p => { p._graded = false; p._drilled = false; });
@@ -1663,8 +1753,7 @@
         document.getElementById('card-content').innerHTML = `
             <h3 class="done-title">${title}</h3>
             <p class="done-text">${lines.map(esc).join('<br>')}</p>
-            <button class="secondary-btn stack-btn" onclick="moreTime()">Mám dnes viac času</button>
-            <button class="secondary-btn stack-btn" onclick="generateNextSession({practice:true})">Precvičiť ešte niečo</button>`;
+            <button class="primary-btn" onclick="generateNextSession({practice:true})">Precvičovať ďalej</button>`;
         setFeedback('', 'Pripravené...');
         updateStats();
     }
@@ -1790,8 +1879,7 @@
                 renderTrainer();
                 return;
             } else {
-                document.getElementById('card-content').innerHTML = `<em>Načítavam ďalší level...</em>`;
-                setTimeout(() => generateNextSession(), 1000);
+                generateNextSession({ flow: true });
                 return;
             }
         }
@@ -1809,6 +1897,7 @@
                 <button class="primary-btn" onclick="nextPhrase()">Rozumiem, poďme na vety ➔</button>`;
             if (!isTransitioning) setFeedback('', 'Pripravené...');
             saveSession();
+            updateStats();
             return;
         }
 
@@ -1856,6 +1945,8 @@
 
     function nextPhrase() {
         if (isTransitioning) return;
+        const prev = sessionPhrases[currentIndex];
+        if (prev && !prev.isRule && !prev.isJustWord && !testMode) { dayState().done++; savePlan(); }
         trainingStep = 'sentence';
         currentIndex++;
         renderTrainer();
@@ -1864,6 +1955,7 @@
     function speakCurrentPhrase() {
         if (!('speechSynthesis' in window)) { autoListenAfterSpeak(0); return; }
         stopListeningNow();
+        setMicNudge(false);
         stopSpeaking();
 
         const item = sessionPhrases[currentIndex];
@@ -1948,12 +2040,12 @@
             return;
         }
 
-        if (isListening) {
-            if (recognition) recognition.stop();
+        if (isListening && (__recognitionTranscript || '').trim()) {
+            if (recognition) recognition.stop();   // už niečo počul -> dokonči a vyhodnoť
             return;
         }
-
-        startListening();
+        if (isListening) stopListeningNow();       // "hluchý" mikrofón -> naštartuj nanovo
+        startListening(false);
     }
 
     // Porovnanie povedaného s cieľovou vetou podľa poradia slov (najdlhšia spoločná
@@ -2131,7 +2223,7 @@
         setFeedback('warning', 'Nevadí — správne je: ' + currentTarget(item) + '. Zajtra to skúsime znova.');
         renderOthers(item);
         isTransitioning = true;
-        setTimeout(() => { isTransitioning = false; nextPhrase(); }, ms || 4200);
+        setTimeout(() => { isTransitioning = false; nextPhrase(); }, ms || 3500);
     }
 
     function evaluateSpeech(spoken) {
@@ -2196,7 +2288,7 @@
             setFeedback('success', msg);
             renderOthers(item);
             isTransitioning = true;
-            setTimeout(() => { isTransitioning = false; nextPhrase(); }, 3500);
+            setTimeout(() => { isTransitioning = false; nextPhrase(); }, 1800);
         } else {
             registerMissedWords(missed);
             if (item._drilled) {
@@ -2408,6 +2500,7 @@
     function saveSettings() {
         const s = userState.settings;
         s.style = document.getElementById('setting-style').value;
+        markStyleHelp();
         s.showOthers = document.getElementById('setting-others').checked;
         s.autoMic = document.getElementById('setting-automic').checked;
         const tr = {
@@ -2424,12 +2517,17 @@
         renderTrainer();
     }
 
+    function markStyleHelp() {
+        const v = document.getElementById('setting-style').value;
+        document.querySelectorAll('#style-help .sh-row').forEach(r => r.classList.toggle('on', r.dataset.s === v));
+    }
     function syncSettingsUI() {
         const s = userState.settings;
         const styleSel = document.getElementById('setting-style');
         const voiceSel = document.getElementById('setting-voice');
         const rateSel = document.getElementById('setting-rate');
         styleSel.value = s.style;
+        markStyleHelp();
         document.getElementById('setting-others').checked = !!s.showOthers;
         document.getElementById('setting-automic').checked = s.autoMic !== false;
         document.getElementById('track-tense').checked = s.tracks.tense !== false;
