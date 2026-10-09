@@ -1555,6 +1555,7 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
             if (err !== 'no-speech') hadError = true;
             if (micTest) {
                 micTest = false;
+                if (isIOS) zastavMerac();   // iPhone: uvoľniť mikrofón hneď po teste
                 const st = document.getElementById('mic-status');
                 nastavMic('chyba');
                 if (st) st.textContent = (err === 'not-allowed' || err === 'service-not-allowed')
@@ -1582,6 +1583,7 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
             if (hadError) { hadError = false; return; }
             if (micTest) {
                 micTest = false;
+                if (isIOS) zastavMerac();   // iPhone: uvoľniť mikrofón hneď po teste
                 const st = document.getElementById('mic-status');
                 if (st) st.textContent = __recognitionTranscript.trim() ? 'Funguje ✅ Počul som: „' + __recognitionTranscript.trim() + '“' : 'Nič som nepočul. Skús znova a hovor hlasnejšie.';
                 return;
@@ -1681,7 +1683,9 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
     }
 
     // ===== Mikrofón: režim (iPhone), farba kruhu, merač hlasitosti, samooprava =====
-    let micRezim = novyRezim();                          // len v pamäti; pri ďalšom spustení sa skúša znova 'jedna'
+    // iPhone: overený spôsob – nové rozpoznávanie pri každej vete (jedno spoločné sa na iPhone zasekávalo, 9.10.2026).
+    // Mac/Android: jedna inštancia ako doteraz.
+    let micRezim = isIOS ? { rezim: 'nova', hluche: 0 } : novyRezim();
     let micOprava = { restartyVete: 0, skrytyOd: null };
     let micAudioZnamy = false;   // prehliadač už poslal „počuje zvuk“ → kontrola 2,5 s má zmysel (inak by reštartovala zbytočne)
     let micAudioPrislo = false;
@@ -1746,7 +1750,7 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
     function armAudioKontrola() {
         clearAudioKontrola();
         micAudioPrislo = false;
-        if (!micAudioZnamy) return;
+        if (!micAudioZnamy || isIOS) return;   // iPhone: žiadny automatický reštart bez ťuknutia (iPhone by ho nemusel dovoliť)
         micAudioKontrola = setTimeout(() => {
             micAudioKontrola = null;
             if (!micAudioPrislo && recognition) vykonajOpravu({ typ: 'bez-audia' });
@@ -1773,6 +1777,7 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
             else { suppressEnd = true; try { recognition && recognition.abort(); } catch (e) {} stopListeningState(); }
             if (test) {
                 micTest = false;
+                if (isIOS) zastavMerac();   // iPhone: uvoľniť mikrofón hneď po teste
                 const st = document.getElementById('mic-status');
                 if (st) st.textContent = 'Mikrofón nič nepočuje. Zavri appku a otvor znova, alebo používaj ⌨️ klávesnicu.';
             } else { setMicNudge(true); setFeedback('', ''); }
