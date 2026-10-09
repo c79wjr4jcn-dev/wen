@@ -587,7 +587,7 @@
             </div>
             <div class="settings-section">
                 <div class="settings-row"><span>Mikrofón sa zapne sám po prečítaní vety:</span><input type="checkbox" id="setting-automic" onchange="saveSettings()" checked></div>
-                <div class="settings-row"><span>Zopakovať slovo, ktoré poviem zle:</span><input type="checkbox" id="setting-wordretry" onchange="saveSettings()" checked></div>
+                <div class="settings-row"><span>Opakovať slová, ktoré poviem zle:</span><input type="checkbox" id="setting-wordretry" onchange="saveSettings()" checked></div>
                 <div class="settings-row"><span>Mikrofón:</span><button class="secondary-btn" style="padding:6px 12px;" onclick="testMic()">Vyskúšať mikrofón</button></div>
                 <div id="mic-status" style="color:var(--text-muted); font-size:0.75rem; line-height:1.4;">—</div>
                 <div id="mic-merac" aria-label="Hlasitosť"><i></i><i></i><i></i><i></i><i></i></div>
@@ -1911,21 +1911,24 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
         try {
             const s = readJSON('qen_session', {});
             if (!s || !Array.isArray(s.items) || !s.items.length || s.d !== dayIndex()) return false;
-            const items = s.items.map((x, i) => {
+            const mapped = s.items.map((x, i) => {
                 if (x.r) return LESSON_BY_ID[x.r] ? { isRule: true, id: 'rule-' + x.r, lesson: x.r } : null;
+                if (x.w && userState.settings.wordRetry === false) return null;
                 if (x.w) return { id: 'fw-r' + i, isJustWord: true, sk: 'Zopakovanie slovíčka:', standard: x.w, slang: x.w };
                 const p = FULL_DATABASE.find(q => q.id === x.id);
                 if (!p) return null;
                 p._graded = !!x.g; p._drilled = !!x.dr;
                 return p;
-            }).filter(Boolean);
-            if (!items.length || !(s.idx >= 0) || s.idx >= items.length) return false;
+            });
+            const items = mapped.filter(Boolean);
+            const idx = mapped.slice(0, s.idx).filter(Boolean).length;   // vynechané položky posunú poradie
+            if (!items.length || !(s.idx >= 0) || idx >= items.length) return false;
             sessionPhrases = items;
-            currentIndex = s.idx;
+            currentIndex = idx;
             practiceMode = !!s.practice;
             userState.failedWords = Array.isArray(s.failed) ? s.failed : [];
             currentFailedWord = (typeof s.word === 'string') ? s.word : '';
-            trainingStep = (s.step === 'isolated_word' && currentFailedWord) ? 'isolated_word' : 'sentence';
+            trainingStep = (s.step === 'isolated_word' && currentFailedWord && userState.settings.wordRetry !== false) ? 'isolated_word' : 'sentence';
             updateStats();
             renderTrainer();
             return true;
@@ -2134,6 +2137,9 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
 
         if (currentIndex >= sessionPhrases.length) {
             if (testMode) { finishTest(); return; }
+            if (userState.failedWords.length > 0 && userState.settings.wordRetry === false) {
+                userState.failedWords = [];   // opakovanie slov vypnuté v ⚙️ → bez bloku „Zopakovanie slovíčka“
+            }
             if (userState.failedWords.length > 0) {
                 const reviewWords = userState.failedWords.slice(0, 8);
                 pendingNotice = `🎉 Blok hotový! Zopakujeme ${reviewWords.length} ${reviewWords.length === 1 ? 'problémové slovo' : 'problémových slov'}.`;
@@ -2665,6 +2671,10 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
             clearWordPickMode();
             gradeOnceFor(item, false);
             revealAndNext(item);
+        } else if (userState.settings.wordRetry === false) {
+            // opakovanie slova vypnuté: ešte raz celá veta, potom správna odpoveď
+            item._drilled = true;
+            setFeedback('fail', 'Skús celú vetu ešte raz – ťukni na 🎤.');
         } else if (!awaitingWordPick) {
             enterWordPickMode();
             setFeedback('warning', 'Ťukni na slovo, ktoré ti nešlo. (Ak nevieš ktoré, ťukni na 🔁 ešte raz - dáme prvé.)');
