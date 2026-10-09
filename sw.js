@@ -1,8 +1,7 @@
 // QEN service worker: appka sa uloží do telefónu a beží aj bez internetu.
 // Stratégia "najprv sieť": ak je internet, dostaneš vždy najnovšiu verziu; ak nie, použije sa uložená kópia.
-const CACHE = 'qen-v7';
-const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png',
-  './js/mikrofon-rezim.js', './js/mikrofon-uroven.js', './js/mikrofon-oprava.js'];
+const CACHE = 'qen-v8';
+const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));

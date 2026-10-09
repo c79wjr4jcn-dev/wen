@@ -667,9 +667,79 @@
     </div>
 </div>
 
-<script src="js/mikrofon-rezim.js"></script>
-<script src="js/mikrofon-uroven.js"></script>
-<script src="js/mikrofon-oprava.js"></script>
+<script>/* === js/mikrofon-rezim.js (vložené, aby appka nepotrebovala priečinok js) === */
+// QEN – režim mikrofónu na iPhone.
+// 'jedna' = jedno rozpoznávanie reči pre všetky vety (Chrome sa nepýta pri každej vete).
+// Ak dvakrát po sebe nič nepočuje, prepne sa na 'nova' = nové rozpoznávanie pri každej vete (doterajšie správanie).
+function novyRezim() { return { rezim: 'jedna', hluche: 0 }; }
+function dalsiRezim(stav, udalost) {
+  if (udalost === 'text') return { rezim: stav.rezim, hluche: 0 };
+  if (udalost === 'hluche') {
+    const hluche = stav.hluche + 1;
+    if (stav.rezim === 'jedna' && hluche >= 2) return { rezim: 'nova', hluche: 0 };
+    return { rezim: stav.rezim, hluche: hluche };
+  }
+  throw new RangeError('neznáma udalosť mikrofónu: ' + udalost);
+}
+if (typeof module !== 'undefined') module.exports = { novyRezim, dalsiRezim };
+</script>
+<script>/* === js/mikrofon-uroven.js (vložené, aby appka nepotrebovala priečinok js) === */
+// QEN – farba a žiara kruhu mikrofónu podľa stavu + skutočná hlasitosť (decibely).
+var MIC_UROVNE = {
+  vypnute: [0, 'siva', 'Mikrofón vypnutý'],
+  start: [1, 'modra', 'Zapínam…'],
+  audio: [2, 'zelena', 'Počúvam'],
+  zvuk: [3, 'zelena', 'Počujem zvuk'],
+  rec: [4, 'zelena', 'Počujem reč'],
+  text: [3, 'zelena', 'Rozumiem'],
+  hluche: [1, 'oranzova', 'Nepočujem – ťukni na 🎤'],
+  chyba: [1, 'cervena', 'Mikrofón nejde']
+};
+function urovenZUdalosti(udalost, dlzkaTextu) {
+  if (!Object.prototype.hasOwnProperty.call(MIC_UROVNE, udalost)) throw new RangeError('neznáma udalosť: ' + udalost);
+  var u = MIC_UROVNE[udalost];
+  var ciarky = u[0];
+  if (udalost === 'text') {
+    var n = (typeof dlzkaTextu === 'number' && isFinite(dlzkaTextu) && dlzkaTextu > 0) ? dlzkaTextu : 0;
+    ciarky = 3 + Math.min(2, Math.floor(n / 15));
+  }
+  return { ciarky: ciarky, farba: u[1], popis: u[2] };
+}
+// rms 0–1 → 0–5 čiarok podľa decibelov
+function urovenZRms(rms) {
+  if (typeof rms !== 'number' || !isFinite(rms) || rms <= 0) return 0;
+  var db = 20 * Math.log10(rms);
+  if (db < -55) return 0;
+  if (db < -45) return 1;
+  if (db < -38) return 2;
+  if (db < -30) return 3;
+  if (db < -22) return 4;
+  return 5;
+}
+if (typeof module !== 'undefined') module.exports = { urovenZUdalosti, urovenZRms };
+</script>
+<script>/* === js/mikrofon-oprava.js (vložené, aby appka nepotrebovala priečinok js) === */
+// QEN – samooprava mikrofónu. Čistá funkcia: povie, čo urobiť; nič sama nespúšťa.
+var MIC_SKRYTE_LIMIT = 30000; // ms v pozadí, po ktorých sa pripraví nové rozpoznávanie
+function rozhodniOpravu(stav, udalost) {
+  var typ = udalost && udalost.typ;
+  var s = { restartyVete: stav.restartyVete, skrytyOd: stav.skrytyOd };
+  switch (typ) {
+    case 'nova-veta': s.restartyVete = 0; return { stav: s, akcia: 'nic' };
+    case 'bez-audia':
+      if (s.restartyVete < 1) { s.restartyVete += 1; return { stav: s, akcia: 'restart' }; }
+      return { stav: s, akcia: 'hluche' };
+    case 'skryte': s.skrytyOd = udalost.cas; return { stav: s, akcia: 'zastav' };
+    case 'viditelne': {
+      var dlho = stav.skrytyOd != null && (udalost.cas - stav.skrytyOd) >= MIC_SKRYTE_LIMIT;
+      s.skrytyOd = null;
+      return { stav: s, akcia: dlho ? 'nova-instancia' : 'nic' };
+    }
+    default: throw new RangeError('neznámy typ udalosti: ' + typ);
+  }
+}
+if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
+</script>
 <script>
     // ===== OBSAH: 24 lekcií, americká angličtina, 3 štýly =====
     // Položka: [slovensky, ORIGINÁL (učebnicová), HOVOROVÁ, SLANG, poznámka, (pevné id)]
