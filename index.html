@@ -587,6 +587,7 @@
             </div>
             <div class="settings-section">
                 <div class="settings-row"><span>Mikrofón sa zapne sám po prečítaní vety:</span><input type="checkbox" id="setting-automic" onchange="saveSettings()" checked></div>
+                <div class="settings-row"><span>Zopakovať slovo, ktoré poviem zle:</span><input type="checkbox" id="setting-wordretry" onchange="saveSettings()" checked></div>
                 <div class="settings-row"><span>Mikrofón:</span><button class="secondary-btn" style="padding:6px 12px;" onclick="testMic()">Vyskúšať mikrofón</button></div>
                 <div id="mic-status" style="color:var(--text-muted); font-size:0.75rem; line-height:1.4;">—</div>
                 <div id="mic-merac" aria-label="Hlasitosť"><i></i><i></i><i></i><i></i><i></i></div>
@@ -1124,7 +1125,7 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
     }
     function writeJSON(k, v) { try { store.set(k, JSON.stringify(v)); } catch (e) {} }
 
-    const DEFAULT_SETTINGS = { style: 'casual', showOthers: true, autoMic: true, tracks: { tense: true, topic: true, slang: true }, autoNext: true, voiceName: '', rate: '1.0', reminderEnabled: false, reminderTime: '18:00' };
+    const DEFAULT_SETTINGS = { style: 'casual', showOthers: true, autoMic: true, wordRetry: true, tracks: { tense: true, topic: true, slang: true }, autoNext: true, voiceName: '', rate: '1.0', reminderEnabled: false, reminderTime: '18:00' };
     function normalizeSettings(s) {
         s = (s && typeof s === 'object' && !Array.isArray(s)) ? s : {};
         const out = Object.assign({}, DEFAULT_SETTINGS, s);
@@ -2560,6 +2561,10 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
             if (item._drilled) {
                 // oprava slova už raz prebehla - žiadna nekonečná slučka, ukážeme správnu vetu a ideme ďalej
                 revealAndNext(item);
+            } else if (userState.settings.wordRetry === false) {
+                // opakovanie slova vypnuté v ⚙️: zlé slová ostanú červené, skúsi sa ešte raz celá veta
+                item._drilled = true;
+                setFeedback('fail', `Chyba pri slove "${trimPunct(missed[0])}". Skús celú vetu ešte raz – ťukni na 🎤.`);
             } else {
                 item._drilled = true;
                 startWordRetry(missed[0]);
@@ -2780,6 +2785,7 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
         markStyleHelp();
         s.showOthers = document.getElementById('setting-others').checked;
         s.autoMic = document.getElementById('setting-automic').checked;
+        s.wordRetry = document.getElementById('setting-wordretry').checked;
         const tr = {
             tense: document.getElementById('track-tense').checked,
             topic: document.getElementById('track-topic').checked,
@@ -2807,6 +2813,7 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
         markStyleHelp();
         document.getElementById('setting-others').checked = !!s.showOthers;
         document.getElementById('setting-automic').checked = s.autoMic !== false;
+        document.getElementById('setting-wordretry').checked = s.wordRetry !== false;
         document.getElementById('track-tense').checked = s.tracks.tense !== false;
         document.getElementById('track-topic').checked = s.tracks.topic !== false;
         document.getElementById('track-slang').checked = s.tracks.slang !== false;
