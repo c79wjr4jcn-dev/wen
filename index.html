@@ -196,24 +196,24 @@
         }
 
         .sk-sentence {
-            font-size: 0.9rem;
+            font-size: clamp(1.35rem, 5.8vw, 1.9rem);
             color: var(--text-muted);
-            margin-bottom: 12px;
-            line-height: 1.3;
+            margin-bottom: 16px;
+            line-height: 1.35;
         }
 
         .slang-box {
             background: rgba(214, 143, 168, 0.12);
             border: 1px solid rgba(214, 143, 168, 0.35);
-            padding: 16px 18px;
+            padding: 18px 20px;
             border-radius: 24px 14px 24px 14px;
-            font-size: 1.1rem;
+            font-size: clamp(1.5rem, 6.4vw, 2.2rem);
             font-weight: 700;
             color: var(--accent);
             margin-bottom: 12px;
             text-align: left;
             width: 100%;
-            line-height: 1.4;
+            line-height: 1.35;
             transition: background 0.3s, border-color 0.3s;
         }
 
@@ -224,7 +224,7 @@
 
         .word {
             display: inline-block;
-            margin-right: 4px;
+            margin-right: 0.28em;
             transition: color 0.2s ease;
         }
 
@@ -382,6 +382,8 @@
             overflow: hidden;
         }
         .settings-panel[open] { padding: 14px; max-height: none; overflow: visible; }
+        /* Keď sú nastavenia otvorené, veta pod nimi sa skryje (nie je to dojem, že veta patrí do nastavení); ✕ ju vráti */
+        body.nastavenia-otvorene #screen-trainer, body.nastavenia-otvorene #screen-onboarding { display: none !important; }
         .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px; }
         .modal-header h3 { font-size: 1rem; color: var(--text-main); }
         .close-modal { background: none; border: none; color: var(--text-muted); font-size: 1.1rem; cursor: pointer; }
@@ -495,6 +497,34 @@
         .app-container { overflow-x: hidden; touch-action: pan-y; }
         .app-container * { max-width: 100%; }
         #mic-log, .alt, .done-text, .rule-text { overflow-wrap: anywhere; }
+        /* Kruh mikrofónu: farba a žiara podľa stavu (sivá vypnutý, modrá zapína, zelená počúva/počuje, oranžová nepočuje, červená nejde) */
+        .mic-main-btn.mic-stav { position: relative; overflow: visible; transition: background 0.15s, opacity 0.15s; box-shadow: none;
+            --off: rgba(185,154,168,0.22); --c1: var(--off); --c2: var(--off); --c3: var(--off); --c4: var(--off); --c5: var(--off); }
+        /* Prstenec okolo 🎤 z 5 dielikov – svieti toľko dielikov, aká silná je hlasitosť (ako čiarky v ⚙️) */
+        .mic-main-btn.mic-stav::before { content: ''; position: absolute; inset: -9px; border-radius: 50%; pointer-events: none;
+            background: conic-gradient(from 198deg,
+                var(--c1) 0deg 60deg, transparent 60deg 72deg, var(--c2) 72deg 132deg, transparent 132deg 144deg,
+                var(--c3) 144deg 204deg, transparent 204deg 216deg, var(--c4) 216deg 276deg, transparent 276deg 288deg,
+                var(--c5) 288deg 348deg, transparent 348deg 360deg);
+            -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 6px), #000 calc(100% - 5px));
+                    mask: radial-gradient(farthest-side, transparent calc(100% - 6px), #000 calc(100% - 5px)); }
+        .mic-main-btn.mic-stav[data-sila="1"] { --c1: var(--mic-farba); }
+        .mic-main-btn.mic-stav[data-sila="2"] { --c1: var(--mic-farba); --c2: var(--mic-farba); }
+        .mic-main-btn.mic-stav[data-sila="3"] { --c1: var(--mic-farba); --c2: var(--mic-farba); --c3: var(--mic-farba); }
+        .mic-main-btn.mic-stav[data-sila="4"] { --c1: var(--mic-farba); --c2: var(--mic-farba); --c3: var(--mic-farba); --c4: var(--mic-farba); }
+        .mic-main-btn.mic-stav[data-sila="5"] { --c1: var(--mic-farba); --c2: var(--mic-farba); --c3: var(--mic-farba); --c4: var(--mic-farba); --c5: var(--warning); }
+        .mic-main-btn.mic-siva { background: var(--text-muted); --mic-farba: var(--text-muted); opacity: 0.85; }
+        .mic-main-btn.mic-modra { background: var(--accent); --mic-farba: var(--accent); }
+        .mic-main-btn.mic-zelena { background: var(--success); --mic-farba: var(--success); }
+        .mic-main-btn.mic-oranzova { background: var(--warning); --mic-farba: var(--warning); animation: pulse 1.1s ease-in-out infinite; }
+        .mic-main-btn.mic-zelena.listening { animation: none; } /* veľkosť a žiara idú podľa hlasu, nie podľa pulzu */
+        .mic-main-btn.mic-cervena { background: var(--danger); --mic-farba: var(--danger); }
+        #mic-merac { display: flex; align-items: flex-end; gap: 4px; height: 22px; margin: 6px 0 2px; }
+        #mic-merac i { display: block; width: 10px; border-radius: 3px; background: var(--text-muted); opacity: 0.3; transition: opacity 0.1s, background 0.1s; }
+        #mic-merac i:nth-child(1) { height: 20%; } #mic-merac i:nth-child(2) { height: 40%; } #mic-merac i:nth-child(3) { height: 60%; } #mic-merac i:nth-child(4) { height: 80%; } #mic-merac i:nth-child(5) { height: 100%; }
+        #mic-merac i.on { background: var(--success); opacity: 1; }
+        #mic-merac i.on:nth-child(5) { background: var(--warning); }
+        @media (prefers-reduced-motion: reduce) { .mic-main-btn.mic-stav { transition: none; animation: none; } }
 </style>
 </head>
 <body>
@@ -559,6 +589,8 @@
                 <div class="settings-row"><span>Mikrofón sa zapne sám po prečítaní vety:</span><input type="checkbox" id="setting-automic" onchange="saveSettings()" checked></div>
                 <div class="settings-row"><span>Mikrofón:</span><button class="secondary-btn" style="padding:6px 12px;" onclick="testMic()">Vyskúšať mikrofón</button></div>
                 <div id="mic-status" style="color:var(--text-muted); font-size:0.75rem; line-height:1.4;">—</div>
+                <div id="mic-merac" aria-label="Hlasitosť"><i></i><i></i><i></i><i></i><i></i></div>
+                <div style="color:var(--text-muted); font-size:0.7rem;">Pri teste hovor bližšie/ďalej a sleduj čiarky.</div>
                 <details style="margin-top:6px;"><summary style="font-size:0.72rem; color:var(--text-muted); cursor:pointer;">Denník mikrofónu</summary>
                     <pre id="mic-log" style="font-size:0.66rem; color:var(--text-muted); white-space:pre-wrap; margin-top:4px;">—</pre></details>
             </div>
@@ -607,7 +639,7 @@
         </div>
 
         <div>
-            <button class="mic-main-btn" id="mic-btn" onclick="toggleSpeech()">🎤</button>
+            <button class="mic-main-btn mic-stav mic-siva" id="mic-btn" title="Mikrofón vypnutý" aria-label="Mikrofón vypnutý" onclick="toggleSpeech()">🎤</button>
             <div id="mic-nudge" style="display:none; text-align:center; font-size:0.78rem; color:var(--accent); margin:2px 0;">Ťukni na 🎤 a povedz vetu</div>
             <div id="dictation-row" class="dictation-row">
                 <div id="dictation-note" style="font-size:0.72rem; color:var(--text-muted); text-align:center; margin-bottom:6px;">Alebo klepni sem a nadiktuj cez 🎤 na klávesnici:</div>
@@ -635,6 +667,9 @@
     </div>
 </div>
 
+<script src="js/mikrofon-rezim.js"></script>
+<script src="js/mikrofon-uroven.js"></script>
+<script src="js/mikrofon-oprava.js"></script>
 <script>
     // ===== OBSAH: 24 lekcií, americká angličtina, 3 štýly =====
     // Položka: [slovensky, ORIGINÁL (učebnicová), HOVOROVÁ, SLANG, poznámka, (pevné id)]
@@ -1280,14 +1315,24 @@
         const us = all.filter(v => /^en[-_]US$/i.test(v.lang || ''));
         const pool = us.length ? us : (en.length ? en : all);
         const isUS = v => /^en[-_]US$/i.test(v.lang || '');
-        availableVoices = pool.slice().sort((a, b) => (isUS(b) ? 1 : 0) - (isUS(a) ? 1 : 0));
+        // Len vybrané americké hlasy: Google US English a Samantha (ženské) + mužské (Google mužský americký hlas nemá).
+        // Ak zariadenie žiadny z nich nemá, ponúkne sa doterajší zoznam, aby čítanie fungovalo vždy.
+        const VYBRANE = [['Google US English', 'žena'], ['Samantha', 'žena'], ['Aaron', 'muž'], ['Alex', 'muž'], ['Evan', 'muž'], ['Nathan', 'muž'], ['Tom', 'muž'], ['Fred', 'muž']];
+        const zaklad = n => String(n || '').replace(/\s*\(.*$/, '').trim();
+        const vybrane = [];
+        VYBRANE.forEach(([meno, rod]) => {
+            const v = us.filter(x => zaklad(x.name) === meno)
+                .sort((a, b) => (/premium|enhanced|vylepšen/i.test(b.name) ? 1 : 0) - (/premium|enhanced|vylepšen/i.test(a.name) ? 1 : 0))[0];
+            if (v) { v._rod = rod; vybrane.push(v); }
+        });
+        availableVoices = vybrane.length ? vybrane : pool.slice().sort((a, b) => (isUS(b) ? 1 : 0) - (isUS(a) ? 1 : 0));
         const voiceSelect = document.getElementById('setting-voice');
         if (!voiceSelect) return;
-        voiceSelect.innerHTML = '<option value="">Predvolený</option>';
+        voiceSelect.innerHTML = '<option value="">Predvolený' + (vybrane.length ? ' – ' + zaklad(vybrane[0].name) : '') + '</option>';
         availableVoices.forEach(voice => {
             const opt = document.createElement('option');
             opt.value = voice.name;
-            opt.textContent = `${voice.name} (${voice.lang})`;
+            opt.textContent = voice._rod ? `${zaklad(voice.name)} – ${voice._rod}` : `${voice.name} (${voice.lang})`;
             voiceSelect.appendChild(opt);
         });
         const wanted = userState.settings.voiceName || '';
@@ -1354,8 +1399,8 @@
         if (!sttSupported) return;
         recognition = createRecognition();
     }
-    // Nová inštancia mikrofónu. Na iPhone sa robí nová pre každé počúvanie (opakované spustenie tej istej
-    // inštancie tam po prvej vete nič nepočuje). Udalosti starej inštancie sa ignorujú.
+    // Nová inštancia mikrofónu. iPhone: najprv jedna inštancia pre všetky vety (Chrome sa nepýta pri každej vete);
+    // ak dvakrát ohluchne, prepne sa na novú inštanciu pri každom počúvaní. Udalosti starej inštancie sa ignorujú.
     function createRecognition() {
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         const rec = new SpeechRecognition();
@@ -1372,10 +1417,12 @@
             hadError = false;
             isListening = true;
             store.set('qen_mic_ok', '1');
+            nastavMic(micAudioZnamy ? 'start' : 'audio');
             if (micTest) { const st = document.getElementById('mic-status'); if (st) st.textContent = 'Počúvam… povedz po anglicky napríklad „Hello, how are you?“'; return; }
+            spustiMeracUcenie();
             updateMicStatus();
             const micBtn = document.getElementById('mic-btn');
-            if (micBtn) { micBtn.classList.add('listening'); micBtn.innerText = '⏹️'; }
+            if (micBtn) { micBtn.classList.add('listening'); micBtn.innerText = '🎤'; }
             setFeedback('warning', (trainingStep === 'isolated_word' || (sessionPhrases[currentIndex] && sessionPhrases[currentIndex].isJustWord)) ? 'Počúvam slovo...' : 'Počúvam... Čítajte pomaly.');
         };
 
@@ -1385,6 +1432,7 @@
             if (micTest) {
                 let t = ''; for (let i = 0; i < e.results.length; ++i) t += e.results[i][0].transcript;
                 __recognitionTranscript = t;
+                if (t.trim()) { micRezimUdalost('text'); nastavMic('text', t.trim().length); }
                 const st = document.getElementById('mic-status'); if (st) st.textContent = 'Počujem: ' + t;
                 return;
             }
@@ -1412,6 +1460,7 @@
                 }
             }
             __recognitionTranscript = currentText;
+            if (currentText.trim()) { micRezimUdalost('text'); nastavMic('text', currentText.trim().length); }
 
             if (trainingStep === 'sentence' && !item.isJustWord) {
                 liveHighlightWords(__recognitionTranscript);
@@ -1436,6 +1485,7 @@
             if (micTest) {
                 micTest = false;
                 const st = document.getElementById('mic-status');
+                nastavMic('chyba');
                 if (st) st.textContent = (err === 'not-allowed' || err === 'service-not-allowed')
                     ? 'Mikrofón nie je povolený ❌ iPhone: Nastavenia → Chrome → zapni Mikrofón a Rozpoznávanie reči. Potom appku zavri a otvor znova.'
                     : 'Mikrofón nefunguje (' + (err || 'chyba') + '). Používaj ⌨️ klávesnicu.';
@@ -1445,6 +1495,7 @@
             if (autoStarted && err === 'not-allowed') { setFeedback('', ''); setMicNudge(true); return; } // automatický štart bez ťuknutia iPhone niekedy nedovolí - stačí ťuknúť na 🎤
             if (err === 'not-allowed' || err === 'service-not-allowed' || err === 'audio-capture') {
                 micFailed = true;
+                nastavMic('chyba');
                 toggleKeyboardRow(true);
                 setFeedback('warning', 'Mikrofón nejde. Diktuj cez klávesnicu nižšie, alebo skontroluj Nastavenia → Vyskúšať mikrofón.');
             } else if (err === 'network') {
@@ -1477,8 +1528,9 @@
                 setMicNudge(true);
             }
         };
-        rec.onaudiostart = () => { if (rec === recognition) micLogAdd('počuje zvuk'); };
-        rec.onspeechstart = () => { if (rec === recognition) micLogAdd('počuje reč'); };
+        rec.onaudiostart = () => { if (rec !== recognition || !isListening) return; micLogAdd('počuje zvuk'); micAudioZnamy = true; micAudioPrislo = true; clearAudioKontrola(); nastavMic('audio'); };
+        rec.onsoundstart = () => { if (rec !== recognition || !isListening) return; micAudioPrislo = true; clearAudioKontrola(); nastavMic('zvuk'); };
+        rec.onspeechstart = () => { if (rec !== recognition || !isListening) return; micLogAdd('počuje reč'); micAudioPrislo = true; clearAudioKontrola(); nastavMic('rec'); };
         return rec;
     }
 
@@ -1486,21 +1538,43 @@
         if (!sttSupported) return;
         autoStarted = !!auto;
         setMicNudge(false);
-        if (isIOS || !recognition) {
-            // iPhone: vždy nová inštancia; stará (ak ešte beží) sa zruší a jej udalosti sa ignorujú
+        vykonajOpravu({ typ: 'nova-veta' });
+        // iPhone, režim 'jedna': tá istá inštancia pre všetky vety (Chrome sa nepýta pri každej vete).
+        // iPhone, režim 'nova' (ak 'jedna' dvakrát ohluchla): nová inštancia pri každom počúvaní, stará sa zruší.
+        if (!recognition || (isIOS && micRezim.rezim === 'nova')) {
             const old = recognition;
             recognition = createRecognition();
             if (old) { try { old.abort(); } catch (e) {} }
         }
         micLogAdd(auto ? 'štart (sám)' : 'štart (ťuknutie)');
-        try { recognition.start(); } catch (err) { micLogAdd('štart zlyhal: ' + (err && err.message || err)); }
+        nastavMic('start');
+        spustiRec(recognition);
+        armAudioKontrola();
+    }
+    // Spustí rozpoznávanie; ak ešte beží (InvalidStateError), zruší ho a o 250 ms spustí znova.
+    function spustiRec(rec) {
+        try { rec.start(); }
+        catch (err) {
+            if (err && err.name === 'InvalidStateError') {
+                micLogAdd('ešte bežal → reštart');
+                suppressEnd = true;
+                try { rec.abort(); } catch (e) {}
+                setTimeout(() => {
+                    if (rec !== recognition) return;
+                    try { rec.start(); } catch (e2) { micLogAdd('štart zlyhal: ' + (e2 && e2.message || e2)); nastavMic('chyba'); }
+                }, 250);
+            } else {
+                micLogAdd('štart zlyhal: ' + (err && err.message || err));
+            }
+        }
     }
     function stopListeningNow() {
         clearWatchdog();
         if (recognition && isListening) {
-            if (isIOS) { const old = recognition; recognition = null; try { old.abort(); } catch (e) {} }
-            else { suppressEnd = true; try { recognition.abort(); } catch (e) {} }
+            if (isIOS && micRezim.rezim === 'nova') { const old = recognition; recognition = null; try { old.abort(); } catch (e) {} }
+            else { suppressEnd = true; try { recognition.abort(); } catch (e) {} } // inštancia sa nezahadzuje
         }
+        clearAudioKontrola();
         stopListeningState();
     }
     // Poistka: ak mikrofón do 6 s nič nezachytí, vypne sa a 🎤 zabliká (nečaká sa donekonečna na "hluchý" mikrofón)
@@ -1512,6 +1586,7 @@
             micWatchdog = null;
             if (!isListening || (__recognitionTranscript || '').trim()) return;
             micLogAdd('nič nepočul 6 s → vypnutý');
+            micRezimUdalost('hluche');
             stopListeningNow();
             setMicNudge(true);
             setFeedback('', '');
@@ -1521,6 +1596,7 @@
     function setMicNudge(on) {
         const b = document.getElementById('mic-btn');
         if (b) b.classList.toggle('nudge', !!on);
+        if (on) nastavMic('hluche');
         const k = document.getElementById('mic-nudge');
         if (k) k.style.display = on ? 'block' : 'none';
     }
@@ -1532,6 +1608,120 @@
         const el = document.getElementById('mic-log');
         if (el) el.textContent = micLog.join('\n');
     }
+
+    // ===== Mikrofón: režim (iPhone), farba kruhu, merač hlasitosti, samooprava =====
+    let micRezim = novyRezim();                          // len v pamäti; pri ďalšom spustení sa skúša znova 'jedna'
+    let micOprava = { restartyVete: 0, skrytyOd: null };
+    let micAudioZnamy = false;   // prehliadač už poslal „počuje zvuk“ → kontrola 2,5 s má zmysel (inak by reštartovala zbytočne)
+    let micAudioPrislo = false;
+    let micAudioKontrola = null;
+    let micMerac = null;         // { stream, ctx, timer, stopTimer } – skutočná hlasitosť
+    function micRezimUdalost(u) {
+        if (!isIOS) return;                              // Mac a Android: bez zmeny
+        const pred = micRezim.rezim;
+        micRezim = dalsiRezim(micRezim, u);
+        if (pred !== micRezim.rezim) micLogAdd('režim: nová inštancia pri každej vete');
+    }
+    function nastavMic(udalost, dlzka) {
+        let u; try { u = urovenZUdalosti(udalost, dlzka); } catch (e) { return; }
+        const b = document.getElementById('mic-btn'); if (!b) return;
+        b.classList.remove('mic-siva', 'mic-modra', 'mic-zelena', 'mic-oranzova', 'mic-cervena');
+        b.classList.add('mic-stav', 'mic-' + u.farba);
+        if (!micMerac || !micMerac.timer || u.farba !== 'zelena') b.dataset.sila = u.ciarky;
+        b.title = u.popis; b.setAttribute('aria-label', u.popis);
+    }
+    // Skutočná hlasitosť z mikrofónu (decibely) → čiarky v ⚙️ a žiara kruhu
+    function spustiMerac(trvanieMs) {
+        if (micMerac || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+        const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+        const m = { stream: null, ctx: null, timer: null, stopTimer: null };
+        micMerac = m;
+        try { m.ctx = new AC(); } catch (e) { micMerac = null; return; }   // vytvorené hneď pri ťuknutí (iPhone)
+        if (trvanieMs) m.stopTimer = setTimeout(zastavMerac, trvanieMs);
+        navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+            if (micMerac !== m) { stream.getTracks().forEach(t => t.stop()); return; }
+            m.stream = stream;
+            try { if (m.ctx.state === 'suspended') m.ctx.resume(); } catch (e) {}
+            const an = m.ctx.createAnalyser(); an.fftSize = 1024;
+            m.ctx.createMediaStreamSource(stream).connect(an);
+            const f = new Float32Array(an.fftSize), by = new Uint8Array(an.fftSize);
+            m.timer = setInterval(() => {
+                let sum = 0;
+                if (an.getFloatTimeDomainData) { an.getFloatTimeDomainData(f); for (let i = 0; i < f.length; i++) sum += f[i] * f[i]; }
+                else { an.getByteTimeDomainData(by); for (let i = 0; i < by.length; i++) { const v = (by[i] - 128) / 128; sum += v * v; } }
+                const lvl = urovenZRms(Math.sqrt(sum / an.fftSize));
+                const b = document.getElementById('mic-btn');
+                if (b && b.classList.contains('mic-zelena')) b.dataset.sila = lvl;
+                document.querySelectorAll('#mic-merac i').forEach((el, i) => el.classList.toggle('on', i < lvl));
+            }, 80);
+        }).catch(() => { if (micMerac === m) zastavMerac(); });  // odmietnuté → ticho späť na udalosti
+    }
+    function zastavMerac() {
+        const m = micMerac; if (!m) return;
+        micMerac = null;
+        if (m.timer) clearInterval(m.timer);
+        if (m.stopTimer) clearTimeout(m.stopTimer);
+        if (m.stream) m.stream.getTracks().forEach(t => t.stop());
+        if (m.ctx) { try { m.ctx.close(); } catch (e) {} }
+        document.querySelectorAll('#mic-merac i').forEach(el => el.classList.remove('on'));
+    }
+    // Mac/Android: merač aj počas učenia, ale len ak je mikrofón už povolený (nikdy nová otázka na povolenie).
+    function spustiMeracUcenie() {
+        if (isIOS || micMerac || !navigator.permissions || !navigator.permissions.query) return;
+        navigator.permissions.query({ name: 'microphone' }).then(r => {
+            if (r.state === 'granted' && isListening && !micTest) spustiMerac(0);
+        }).catch(() => {});
+    }
+    function armAudioKontrola() {
+        clearAudioKontrola();
+        micAudioPrislo = false;
+        if (!micAudioZnamy) return;
+        micAudioKontrola = setTimeout(() => {
+            micAudioKontrola = null;
+            if (!micAudioPrislo && recognition) vykonajOpravu({ typ: 'bez-audia' });
+        }, 2500);
+    }
+    function clearAudioKontrola() { if (micAudioKontrola) { clearTimeout(micAudioKontrola); micAudioKontrola = null; } }
+    function vykonajOpravu(udalost) {
+        let r; try { r = rozhodniOpravu(micOprava, udalost); } catch (e) { return; }
+        micOprava = r.stav;
+        if (r.akcia === 'restart') {
+            micLogAdd('samooprava: reštart');
+            const rec = recognition;
+            suppressEnd = true;
+            try { rec.abort(); } catch (e) {}
+            setTimeout(() => {
+                if (rec !== recognition || isListening) return;
+                nastavMic('start'); spustiRec(rec); armAudioKontrola();
+            }, 300);
+        } else if (r.akcia === 'hluche') {
+            micLogAdd('samooprava: mikrofón nepočuje');
+            micRezimUdalost('hluche');
+            const test = micTest;
+            if (isListening) stopListeningNow();
+            else { suppressEnd = true; try { recognition && recognition.abort(); } catch (e) {} stopListeningState(); }
+            if (test) {
+                micTest = false;
+                const st = document.getElementById('mic-status');
+                if (st) st.textContent = 'Mikrofón nič nepočuje. Zavri appku a otvor znova, alebo používaj ⌨️ klávesnicu.';
+            } else { setMicNudge(true); setFeedback('', ''); }
+        } else if (r.akcia === 'zastav') {
+            if (isListening) { micLogAdd('appka v pozadí → mikrofón vypnutý'); stopListeningNow(); }
+            zastavMerac();
+        } else if (r.akcia === 'nova-instancia') {
+            if (sttSupported && !isListening) {
+                const old = recognition;
+                recognition = createRecognition();
+                if (old) { try { old.abort(); } catch (e) {} }
+                micLogAdd('samooprava: nový mikrofón po návrate');
+            }
+        }
+    }
+    // Návrat do appky: po dlhšej dobe v pozadí sa pripraví nový mikrofón (sám sa nezapína)
+    document.addEventListener('visibilitychange', () => {
+        if (!sttSupported) return;
+        vykonajOpravu({ typ: document.hidden ? 'skryte' : 'viditelne', cas: Date.now() });
+    });
     function testMic() {
         const st = document.getElementById('mic-status');
         if (!sttSupported) { if (st) st.textContent = 'Tento prehliadač webový mikrofón nepodporuje. Používaj ⌨️ klávesnicu.'; return; }
@@ -1540,6 +1730,7 @@
         micTest = true;
         micFailed = false;
         if (st) st.textContent = 'Spúšťam mikrofón… (ak sa iPhone spýta, ťukni na Povoliť)';
+        spustiMerac(10000);
         setTimeout(() => startListening(false), 150);
     }
     // Po prečítaní vety sa mikrofón zapne sám (ak je to zapnuté v nastaveniach)
@@ -1966,8 +2157,10 @@
         const utterance = new SpeechSynthesisUtterance(text);
         utterance.lang = 'en-US';
         utterance.rate = parseFloat(userState.settings.rate || '1.0');
-        if (userState.settings.voiceName) {
-            const v = availableVoices.find(x => x.name === userState.settings.voiceName);
+        {
+            // zvolený hlas; „Predvolený“ = prvý z vybraných (Google US English, inak Samantha)
+            const v = (userState.settings.voiceName && availableVoices.find(x => x.name === userState.settings.voiceName))
+                || (availableVoices[0] && availableVoices[0]._rod ? availableVoices[0] : null);
             if (v) { utterance.voice = v; utterance.lang = v.lang || 'en-US'; }
         }
 
@@ -2185,11 +2378,14 @@
 
     function stopListeningState() {
         isListening = false;
+        clearAudioKontrola();
+        if (!micTest) zastavMerac();
         const micBtn = document.getElementById('mic-btn');
         if(micBtn) {
             micBtn.classList.remove('listening');
             micBtn.innerText = '🎤';
         }
+        nastavMic(micBtn && micBtn.classList.contains('nudge') ? 'hluche' : 'vypnute');
     }
 
     function evaluateIsolatedWord(spoken) {
@@ -2417,8 +2613,19 @@
         setFeedback('success', 'Pridané ✅ Príde v ďalšom bloku.');
     }
 
-    function openSettings() { stopListeningNow(); document.getElementById('settings-modal').open = true; syncSettingsUI(); }
-    function closeSettings() { document.getElementById('settings-modal').open = false; }
+    function openSettings() {
+        stopListeningNow();
+        document.getElementById('settings-modal').open = true;
+        document.body.classList.add('nastavenia-otvorene');
+        const c = document.querySelector('.app-container'); if (c) c.scrollTop = 0;
+        syncSettingsUI();
+    }
+    function closeSettings() {
+        zastavMerac();
+        document.getElementById('settings-modal').open = false;
+        document.body.classList.remove('nastavenia-otvorene');
+        const c = document.querySelector('.app-container'); if (c) c.scrollTop = 0;
+    }
     function updateProfileName(name) { if (name) { userState.name = name; store.set('qen_name', name); } }
     
     let resetArmed = false, resetTimer = null;
