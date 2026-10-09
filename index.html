@@ -591,7 +591,7 @@
                 <div class="settings-row"><span>Mikrofón:</span><button class="secondary-btn" style="padding:6px 12px;" onclick="testMic()">Vyskúšať mikrofón</button></div>
                 <div id="mic-status" style="color:var(--text-muted); font-size:0.75rem; line-height:1.4;">—</div>
                 <div id="mic-merac" aria-label="Hlasitosť"><i></i><i></i><i></i><i></i><i></i></div>
-                <div style="color:var(--text-muted); font-size:0.7rem;">Pri teste hovor bližšie/ďalej a sleduj čiarky.</div>
+                <div id="mic-merac-tip" style="color:var(--text-muted); font-size:0.7rem;">Pri teste hovor bližšie/ďalej a sleduj čiarky.</div>
                 <details style="margin-top:6px;"><summary style="font-size:0.72rem; color:var(--text-muted); cursor:pointer;">Denník mikrofónu</summary>
                     <pre id="mic-log" style="font-size:0.66rem; color:var(--text-muted); white-space:pre-wrap; margin-top:4px;">—</pre></details>
             </div>
@@ -1706,10 +1706,10 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
         b.title = u.popis; b.setAttribute('aria-label', u.popis);
     }
     // Skutočná hlasitosť z mikrofónu (decibely) → čiarky v ⚙️ a žiara kruhu
-    function spustiMerac(trvanieMs) {
+    function spustiMerac(trvanieMs, poKonci) {
         if (micMerac || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
         const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
-        const m = { stream: null, ctx: null, timer: null, stopTimer: null };
+        const m = { stream: null, ctx: null, timer: null, stopTimer: null, poKonci: poKonci || null };
         micMerac = m;
         try { m.ctx = new AC(); } catch (e) { micMerac = null; return; }   // vytvorené hneď pri ťuknutí (iPhone)
         if (trvanieMs) m.stopTimer = setTimeout(zastavMerac, trvanieMs);
@@ -1739,6 +1739,7 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
         if (m.stream) m.stream.getTracks().forEach(t => t.stop());
         if (m.ctx) { try { m.ctx.close(); } catch (e) {} }
         document.querySelectorAll('#mic-merac i').forEach(el => el.classList.remove('on'));
+        if (m.poKonci) setTimeout(m.poKonci, 600);   // krátka pauza, aby iPhone mikrofón naozaj pustil
     }
     // Mac/Android: merač aj počas učenia, ale len ak je mikrofón už povolený (nikdy nová otázka na povolenie).
     function spustiMeracUcenie() {
@@ -1795,7 +1796,7 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
     }
     // Návrat do appky: po dlhšej dobe v pozadí sa pripraví nový mikrofón (sám sa nezapína)
     document.addEventListener('visibilitychange', () => {
-        if (!sttSupported) return;
+        if (!sttSupported || isIOS) return;   // iPhone: správanie mikrofónu ako v overenej pôvodnej verzii
         vykonajOpravu({ typ: document.hidden ? 'skryte' : 'viditelne', cas: Date.now() });
     });
     function testMic() {
@@ -1805,10 +1806,26 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
         stopListeningNow();
         micTest = true;
         micFailed = false;
+        // iPhone: merač a rozpoznávanie NIE naraz (spolu sa na iPhone zablokovali). 1. ťuknutie = merač 8 s, 2. ťuknutie = rozpoznávanie.
+        if (isIOS && !iosMeracHotovy) {
+            micTest = false;
+            if (st) st.textContent = '1/2 Merač: hovor 8 s bližšie/ďalej a sleduj čiarky… (ak sa iPhone spýta, ťukni na Povoliť)';
+            micLogAdd('merač: štart');
+            spustiMerac(8000, () => {
+                iosMeracHotovy = true;
+                micLogAdd('merač: koniec, mikrofón uvoľnený');
+                const s2 = document.getElementById('mic-status');
+                if (s2) s2.textContent = '2/2 Merač hotový. Ťukni znova na „Vyskúšať mikrofón“ a povedz „Hello, how are you?“';
+            });
+            if (!micMerac) { iosMeracHotovy = true; if (st) st.textContent = 'Merač tu nejde. Ťukni znova na „Vyskúšať mikrofón“ pre test rozpoznávania.'; }
+            return;
+        }
+        iosMeracHotovy = false;
         if (st) st.textContent = 'Spúšťam mikrofón… (ak sa iPhone spýta, ťukni na Povoliť)';
-        spustiMerac(10000);
+        if (!isIOS) spustiMerac(10000);
         setTimeout(() => startListening(false), 150);
     }
+    let iosMeracHotovy = false;
     // Po prečítaní vety sa mikrofón zapne sám (ak je to zapnuté v nastaveniach)
     function autoListenAfterSpeak(tries) {
         if (userState.settings.autoMic === false || !micUsable() || isListening) return;
