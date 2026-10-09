@@ -1482,7 +1482,8 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
 
         rec.onstart = () => {
             if (rec !== recognition) return;
-            micLogAdd('zapnutý'); armWatchdog();
+            rec._ukoncene = false;
+            micLogAdd('zapnutý'); armWatchdog(); armMaxCas(rec);
             __recognitionTranscript = "";
             suppressEnd = false;
             hadError = false;
@@ -1500,6 +1501,10 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
         rec.onresult = (e) => {
             if (rec !== recognition) return;
             clearWatchdog(); micLogAdd('text: ' + (e.results[e.results.length - 1][0].transcript || ''));
+            {   // iPhone Safari niekedy počúvanie sám neukončí → po 1,5 s ticha ho ukončíme my; prázdny text = poistka beží ďalej
+                let vsetko = ''; for (let i = 0; i < e.results.length; ++i) vsetko += e.results[i][0].transcript || '';
+                if (vsetko.trim()) armTicho(rec); else armWatchdog();
+            }
             if (micTest) {
                 let t = ''; for (let i = 0; i < e.results.length; ++i) t += e.results[i][0].transcript;
                 __recognitionTranscript = t;
@@ -1575,8 +1580,14 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
             }
         };
 
-        rec.onend = () => {
-            if (rec !== recognition) return;
+        rec.onend = () => ukonciPocuvanie(rec);
+        return dokoncenieRec(rec);
+    }
+    // Koniec počúvania – volá ho prehliadač (onend) alebo poistka, ak iPhone onend nepošle. Prebehne len raz.
+    function ukonciPocuvanie(rec) {
+            if (rec !== recognition || rec._ukoncene) return;
+            rec._ukoncene = true;
+            clearTicho();
             clearWatchdog(); micLogAdd('koniec');
             stopListeningState();
             if (suppressEnd) { suppressEnd = false; __recognitionTranscript = ''; return; }
@@ -1600,7 +1611,8 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
                 setFeedback('', '');
                 setMicNudge(true);
             }
-        };
+    }
+    function dokoncenieRec(rec) {
         rec.onaudiostart = () => { if (rec !== recognition || !isListening) return; micLogAdd('počuje zvuk'); micAudioZnamy = true; micAudioPrislo = true; clearAudioKontrola(); nastavMic('audio'); };
         rec.onsoundstart = () => { if (rec !== recognition || !isListening) return; micAudioPrislo = true; clearAudioKontrola(); nastavMic('zvuk'); };
         rec.onspeechstart = () => { if (rec !== recognition || !isListening) return; micLogAdd('počuje reč'); micAudioPrislo = true; clearAudioKontrola(); nastavMic('rec'); };
@@ -1655,17 +1667,50 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
     function armWatchdog() {
         clearWatchdog();
         if (micTest) return;
+        // iPhone po prečítaní vety: hluchý mikrofón sa zistí do 4 s a raz sa sám naštartuje nanovo (bez čakania na oranžovú)
+        const iosAuto = isIOS && autoStarted && micAutoZnovu < 1;
         micWatchdog = setTimeout(() => {
             micWatchdog = null;
             if (!isListening || (__recognitionTranscript || '').trim()) return;
+            if (iosAuto && autoStarted && micAutoZnovu < 1) {
+                micAutoZnovu++;
+                micLogAdd('po prečítaní hluchý → nový mikrofón');
+                stopListeningNow();
+                nastavMic('start');
+                setTimeout(() => { if (!isListening && !isTransitioning) startListening(true); }, 450);
+                return;
+            }
             micLogAdd('nič nepočul 6 s → vypnutý');
             micRezimUdalost('hluche');
             stopListeningNow();
             setMicNudge(true);
             setFeedback('', '');
-        }, 6000);
+        }, iosAuto ? 4000 : 6000);
     }
     function clearWatchdog() { if (micWatchdog) { clearTimeout(micWatchdog); micWatchdog = null; } }
+    // Ticho po reči (1,5 s) alebo príliš dlhé počúvanie (15 s) → ukončiť; ak iPhone ani potom nepošle koniec, vyhodnotiť aj tak.
+    let micTicho = null, micMax = null;
+    function clearTicho() { if (micTicho) { clearTimeout(micTicho); micTicho = null; } if (micMax) { clearTimeout(micMax); micMax = null; } }
+    function vynutKoniec(rec, dovod) {
+        if (rec !== recognition || !isListening || rec._ukoncene) return;
+        micLogAdd(dovod);
+        try { rec.stop(); } catch (e) {}
+        setTimeout(() => {
+            if (rec !== recognition || rec._ukoncene) return;
+            micLogAdd('prehliadač neukončil → vyhodnocujem');
+            ukonciPocuvanie(rec);
+            if (isIOS) recognition = null;            // iPhone: ďalšie počúvanie dostane nový mikrofón
+            try { rec.abort(); } catch (e) {}
+        }, 1200);
+    }
+    function armTicho(rec) {
+        if (micTicho) clearTimeout(micTicho);
+        micTicho = setTimeout(() => { micTicho = null; vynutKoniec(rec, 'ticho 1,5 s → koniec'); }, 1500);
+    }
+    function armMaxCas(rec) {
+        if (micMax) clearTimeout(micMax);
+        micMax = setTimeout(() => { micMax = null; vynutKoniec(rec, 'počúvanie 15 s → koniec'); }, 15000);
+    }
     function setMicNudge(on) {
         const b = document.getElementById('mic-btn');
         if (b) b.classList.toggle('nudge', !!on);
@@ -1828,14 +1873,16 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
     let iosMeracHotovy = false;
     // Po prečítaní vety sa mikrofón zapne sám (ak je to zapnuté v nastaveniach)
     function autoListenAfterSpeak(tries) {
+        if (!tries) micAutoZnovu = 0;
         if (userState.settings.autoMic === false || !micUsable() || isListening) return;
         if (isTransitioning) { if ((tries || 0) < 15) setTimeout(() => autoListenAfterSpeak((tries || 0) + 1), 200); return; }
         const cur = sessionPhrases[currentIndex];
         if (!cur || cur.isRule) return;
         if (!document.getElementById('screen-trainer').classList.contains('active')) return;
         if (document.getElementById('settings-modal').open) return;
-        setTimeout(() => { if (!isListening && !isTransitioning) startListening(true); }, isIOS ? 700 : 250);
+        setTimeout(() => { if (!isListening && !isTransitioning) startListening(true); }, isIOS ? 1000 : 250);
     }
+    let micAutoZnovu = 0;   // iPhone: koľkokrát sa po prečítaní vety mikrofón sám znova naštartoval
 
     function updateMicStatus() {
         const el = document.getElementById('mic-status');
@@ -2334,6 +2381,14 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
 
         if (isListening && (__recognitionTranscript || '').trim()) {
             if (recognition) recognition.stop();   // už niečo počul -> dokonči a vyhodnoť
+            return;
+        }
+        if (isListening && isIOS) {
+            // iPhone: hluchý mikrofón najprv úplne pustiť, až potom nový (okamžitý štart sa na iPhone nechytil – treba bolo ťukať 4×)
+            micLogAdd('ťuknutie na hluchý → reštart');
+            stopListeningNow();
+            nastavMic('start');
+            setTimeout(() => { if (!isListening) startListening(false); }, 450);
             return;
         }
         if (isListening) stopListeningNow();       // "hluchý" mikrofón -> naštartuj nanovo
