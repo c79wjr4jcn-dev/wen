@@ -1414,7 +1414,8 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
 
     if ('speechSynthesis' in window) window.speechSynthesis.onvoiceschanged = loadVoices;
 
-    function stopSpeaking() { try { if ('speechSynthesis' in window) window.speechSynthesis.cancel(); } catch (e) {} }
+    let ttsKoniec = 0;   // kedy naposledy skončilo/zrušilo sa čítanie (iPhone: mikrofón hneď po čítaní ohluchne)
+    function stopSpeaking() { try { if ('speechSynthesis' in window) { if (window.speechSynthesis.speaking) ttsKoniec = Date.now(); window.speechSynthesis.cancel(); } } catch (e) {} }
 
     // iPhone povolí čítanie nahlas až po prvom ťuknutí používateľa - jedno tiché
     // "odomknutie" pri prvom dotyku, aby automatické čítanie vety potom fungovalo.
@@ -1503,7 +1504,7 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
             clearWatchdog(); micLogAdd('text: ' + (e.results[e.results.length - 1][0].transcript || ''));
             {   // iPhone Safari niekedy počúvanie sám neukončí → po 1,5 s ticha ho ukončíme my; prázdny text = poistka beží ďalej
                 let vsetko = ''; for (let i = 0; i < e.results.length; ++i) vsetko += e.results[i][0].transcript || '';
-                if (vsetko.trim()) armTicho(rec); else armWatchdog();
+                if (vsetko.trim()) { armTicho(rec); micHlucheZaSebou = 0; const fb = document.getElementById('feedback-box'); if (fb) fb.onclick = null; } else armWatchdog();
             }
             if (micTest) {
                 let t = ''; for (let i = 0; i < e.results.length; ++i) t += e.results[i][0].transcript;
@@ -1621,6 +1622,17 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
 
     function startListening(auto) {
         if (!sttSupported) return;
+        if (isIOS) {
+            // iPhone: mikrofón zapnutý počas/hneď po čítaní vety sa zasekne natrvalo → počkať 1 s od konca čítania
+            try { if (window.speechSynthesis && window.speechSynthesis.speaking) stopSpeaking(); } catch (e) {}
+            const cakaj = 1000 - (Date.now() - ttsKoniec);
+            if (cakaj > 50) {
+                micLogAdd('čakám na koniec čítania');
+                nastavMic('start'); setMicNudge(false);
+                setTimeout(() => { if (!isListening) startListening(auto); }, cakaj);
+                return;
+            }
+        }
         autoStarted = !!auto;
         setMicNudge(false);
         vykonajOpravu({ typ: 'nova-veta' });
@@ -1680,12 +1692,22 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
                 setTimeout(() => { if (!isListening && !isTransitioning) startListening(true); }, 450);
                 return;
             }
-            micLogAdd('nič nepočul 6 s → vypnutý');
+            micLogAdd('nič nepočul → vypnutý');
             micRezimUdalost('hluche');
             stopListeningNow();
             setMicNudge(true);
             setFeedback('', '');
+            micHlucheZaSebou++;
+            if (isIOS && micHlucheZaSebou >= 2) ponukniObnovu();
         }, iosAuto ? 4000 : 6000);
+    }
+    // iPhone: keď mikrofón 2× po sebe nič nepočuje, zasekol sa natrvalo – pomôže len obnoviť stránku (pokrok ostáva uložený)
+    let micHlucheZaSebou = 0;
+    function ponukniObnovu() {
+        micLogAdd('zaseknutý 2× → ponúkam obnovenie');
+        setFeedback('warning', '🔄 Mikrofón sa zasekol. Ťukni sem – appka sa obnoví (pokrok ostane).');
+        const fb = document.getElementById('feedback-box');
+        if (fb) fb.onclick = () => { try { saveSession(); } catch (e) {} location.reload(); };
     }
     function clearWatchdog() { if (micWatchdog) { clearTimeout(micWatchdog); micWatchdog = null; } }
     // Ticho po reči (1,5 s) alebo príliš dlhé počúvanie (15 s) → ukončiť; ak iPhone ani potom nepošle koniec, vyhodnotiť aj tak.
@@ -2333,12 +2355,14 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
         };
 
         utterance.onend = () => {
+            ttsKoniec = Date.now();
             if (box) box.classList.remove('speaking');
             wordSpans.forEach(w => { w.classList.remove('tts-active'); w.classList.remove('tts-read'); });
             autoListenAfterSpeak(0);
         };
 
         utterance.onerror = () => {
+            ttsKoniec = Date.now();
             if (box) box.classList.remove('speaking');
             wordSpans.forEach(w => { w.classList.remove('tts-active'); w.classList.remove('tts-read'); });
         };
