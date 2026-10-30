@@ -1704,8 +1704,9 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
     // iPhone: keď mikrofón 2× po sebe nič nepočuje, zasekol sa natrvalo – pomôže len obnoviť stránku (pokrok ostáva uložený)
     let micHlucheZaSebou = 0;
     function ponukniObnovu() {
-        micLogAdd('zaseknutý 2× → ponúkam obnovenie');
-        setFeedback('warning', '🔄 Mikrofón sa zasekol. Ťukni sem – appka sa obnoví (pokrok ostane).');
+        micLogAdd('zaseknutý 2× → ponúkam obnovenie + klávesnica');
+        toggleKeyboardRow(true);
+        setFeedback('warning', '⌨️ Mikrofón teraz nepočuje — nadiktuj vetu nižšie cez klávesnicu. (Alebo ťukni sem a appka sa obnoví, pokrok ostane.)');
         const fb = document.getElementById('feedback-box');
         if (fb) fb.onclick = () => { try { saveSession(); } catch (e) {} location.reload(); };
     }
