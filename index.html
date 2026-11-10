@@ -478,6 +478,17 @@
         body.show-manual .manual-check-row { display: block; }
         body.info-card #screen-trainer .trainer-card ~ div { display: none; }
         .card-hint:empty { display: none; }
+        .word.skryte:not(.spoken-match):not(.spoken-fail) { color: transparent; background: rgba(214, 143, 168, 0.28); border-radius: 8px; user-select: none; -webkit-user-select: none; }
+        .word.skryte:not(.spoken-match):not(.spoken-fail) .letter { color: transparent; }
+        .volba-btn { width: 100%; margin-top: 8px; flex: none; font-size: 0.95rem; line-height: 1.3; white-space: normal; padding: 11px 12px; }
+        .volba-btn.zle { border-color: var(--danger); color: var(--danger); opacity: 0.55; }
+        body.faza-vyber #mic-btn, body.faza-vyber #mic-nudge { visibility: hidden; }
+        .cue-riadok { font-size: 0.95rem; color: var(--text-muted); border: 1px dashed rgba(214, 143, 168, 0.4); border-radius: 12px; padding: 6px 12px; margin-bottom: 10px; cursor: pointer; }
+        .pocuvaj-ikona { font-size: 2.2rem; margin: 2px 0 4px; }
+        .pokrok-riadok { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 0.82rem; margin-bottom: 8px; color: var(--text-muted); }
+        .pokrok-riadok b { font-size: 1.15rem; color: var(--accent); }
+        .pokrok-riadok small { font-size: 0.68rem; }
+        .pokrok-riadok > span:last-child { text-align: right; white-space: nowrap; }
 
         /* Mikrofón ako v starej verzii; klávesnica len ako záloha */
         .kb-link { display: none; background: none; border: none; color: var(--text-muted); font-size: 0.72rem; margin: 0 auto 2px; padding: 2px 8px; cursor: pointer; }
@@ -539,7 +550,7 @@
         </div>
 
         <div class="stats-bar">
-            <span id="streak-counter" style="color: var(--accent);">📊 Naučené vety: 0</span>
+            <span id="streak-counter" style="color: var(--accent); cursor: pointer;" onclick="openSettings()">📊 Naučené vety: 0</span>
             <span id="progress-counter">0 / 0</span>
         </div>
         <div class="progress-track">
@@ -553,7 +564,9 @@
                 <h3>⚙️ Nastavenia & Profil</h3>
                 <button class="close-modal" onclick="closeSettings()">✕</button>
             </div>
+            <div class="settings-section" id="pokrok-box"></div>
             <div class="settings-section">
+                <div class="settings-row"><span>Učiť sa bez čítania (počúvaj → povedz z hlavy):</span><input type="checkbox" id="setting-bezcitania" onchange="saveSettings()" checked></div>
                 <div class="settings-row"><span>Meno:</span><input type="text" id="settings-name" onchange="updateProfileName(this.value)"></div>
                 <div class="settings-row"><span>Štýl vety:</span>
                     <select id="setting-style" onchange="saveSettings()">
@@ -588,6 +601,9 @@
             <div class="settings-section">
                 <div class="settings-row"><span>Mikrofón sa zapne sám po prečítaní vety:</span><input type="checkbox" id="setting-automic" onchange="saveSettings()" checked></div>
                 <div class="settings-row"><span>Opakovať slová, ktoré poviem zle:</span><input type="checkbox" id="setting-wordretry" onchange="saveSettings()" checked></div>
+                <div class="settings-row"><span>Rozpoznávať reč priamo v zariadení (iPhone: nechaj zapnuté):</span><input type="checkbox" id="setting-ownstt" onchange="saveSettings()"></div>
+                <div class="settings-row"><span>Presnejšie rozpoznávanie (väčšie sťahovanie, pomalšie):</span><input type="checkbox" id="setting-ownpresny" onchange="saveSettings()"></div>
+                <div class="settings-row"><span>Mikrofón nechať zapnutý medzi vetami (menej otázok na povolenie, hlas môže byť tichší):</span><input type="checkbox" id="setting-mickeep" onchange="saveSettings()"></div>
                 <div class="settings-row"><span>Mikrofón:</span><button class="secondary-btn" style="padding:6px 12px;" onclick="testMic()">Vyskúšať mikrofón</button></div>
                 <div id="mic-status" style="color:var(--text-muted); font-size:0.75rem; line-height:1.4;">—</div>
                 <div id="mic-merac" aria-label="Hlasitosť"><i></i><i></i><i></i><i></i><i></i></div>
@@ -658,10 +674,11 @@
                     <button class="secondary-btn" style="color:var(--success); border-color:var(--success);" onclick="manualSelfAssess(true)">✅ Povedal/a som správne</button>
                     <button class="secondary-btn" onclick="manualSelfAssess(false)">🔁 Skúsim znova</button>
                 </div>
+                <button class="secondary-btn stack-btn" id="btn-mojhlas" style="display:none;" onclick="prehrajMojHlas()">🎧 Vypočuť vzor a potom môj hlas</button>
             </div>
 
             <div class="action-row">
-                <button class="secondary-btn" onclick="speakCurrentPhrase()">🔊 Prehrať</button>
+                <button class="secondary-btn" id="btn-prehrat" onclick="speakCurrentPhrase()">🔊 Prehrať</button>
                 <button class="secondary-btn" onclick="nextPhrase()">Ďalšia ➔</button>
             </div>
         </div>
@@ -1100,6 +1117,64 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
         });
     });
 
+    // ===== Rozhovory: čo povie „ten druhý“ (len hlasom), na čo je veta prirodzenou odpoveďou. Poradie = poradie viet v lekcii. =====
+    const CUES = {
+        T1: ["What do you drink in the morning?", "Where does your sister work?", "What time do you get up?", "Do your neighbors have any pets?", "Do you watch a lot of TV?", "I try to stay in shape.", "Does your brother play guitar?", "I need to buy some milk.", "At what temperature does water boil?", "When do you go grocery shopping?"],
+        T2: ["What are you doing right now?", "How's the weather over there?", "Hey, it's me.", "Where are the kids?", "Where are you right now?", "Why is your phone off?", "What are you studying this week?", "Your phone is ringing.", "Hello? Can you hear me?", "What are you doing tomorrow?"],
+        T3: ["What did you do yesterday?", "Where were you last week?", "Have you seen Tom today?", "You look tired.", "Look, I got new shoes!", "Why didn't you call me?", "Do you still live downtown?", "Why are you late?", "I love basketball.", "Why can't you open the door?"],
+        T4: ["Why didn't you answer the phone?", "Sorry, I missed your call last night.", "Why are your clothes wet?", "Did you two talk at dinner?", "How did you fall?", "Were the kids still up?", "Sorry, I had to take that call.", "What were you doing when I called?", "Did you hear what he said?", "What were you doing outside?"],
+        T5: ["Should we have a picnic tomorrow?", "These bags are so heavy.", "Any plans for next week?", "Can you give me an answer?", "The meeting starts at nine sharp.", "Finally, it's Friday!", "I bought him a present.", "What's new with you?", "Have a safe trip!", "What are you doing after work?"],
+        T6: ["Can we meet at five tomorrow?", "Where will you be in an hour?", "You should come visit me.", "Are you excited about your vacation?", "I'm staying home tonight.", "Can I call you at ten tomorrow?", "We're almost there. Where are you?", "I have a big exam tomorrow.", "I'll be there around six.", "I'm just finishing something."],
+        T7: ["Does he know this town well?", "I love traveling.", "What's wrong?", "Are you hungry?", "Is Mark here?", "Sorry I'm late!", "Do you like sushi?", "I love going to the movies.", "How's the project going?", "Are you back in the office?"],
+        W1: ["Hey! Is that really you?", "Hi, I'm Sarah.", "Hey there!", "How are you doing?", "Good morning! Happy Monday.", "There you are!", "Sorry, I'm a few minutes late.", "All done. I fixed it for you.", "Thanks so much for your help.", "I have to go now. Bye!"],
+        W2: ["You need to fill out this form and take it to window three.", "My number is five five five, one two three four.", "So you just go straight, turn left, and it's right there.", "This one is out of order.", "My last name is Kowalczyk.", "Where are you from? Your English is good.", "You push this button to start.", "It's a real bargain.", "The address is twelve Oak Street.", "We close in ten minutes."],
+        W3: ["Who is this?", "My family is really small.", "Where do your parents live?", "I'm free on Friday night.", "How do you like living here?", "You should visit us someday.", "We met in high school, remember?", "Thank you for always being there.", "I love you.", "I'm so bored."],
+        W4: ["Can I get you anything else?", "What can I get for you?", "For here or to go?", "Would you like the chicken?", "Are you ready to order?", "It's already noon.", "Do you need anything?", "How is everything?", "What do you like to do at home?", "I have a free hour."],
+        W5: ["That will be twenty dollars.", "How does it fit?", "Can I help you with anything?", "This jacket is very popular.", "Hi, how can I help you?", "Are you looking for something?", "Why are you going to the mall?", "This one is really nice.", "It's two hundred dollars.", "Are you ready to go?"],
+        W6: ["Can I help you?", "Welcome! Do you need directions?", "You just missed the train.", "Next, please. Where to?", "Here is a map of the city.", "Are you okay? You look confused.", "Front desk. How can I help?", "Why did you arrive so late?", "The tank is almost empty.", "Welcome to the hotel. Do you have a reservation?"],
+        W7: ["Are you okay?", "What's the matter?", "You look really sick.", "What are your symptoms?", "You need some medicine.", "Do you have any allergies?", "Doctor's office. How can I help you?", "Where does it hurt?", "Here is your medicine.", "He fell and he's not moving!"],
+        W8: ["The kitchen smells bad.", "How's the new place?", "It's so dark in here.", "Where are the keys?", "When do you pay rent?", "Are you moving?", "Why did you take the stairs?", "There are crumbs everywhere.", "Do you want to go out today?", "Why are your clothes still dirty?"],
+        W9: ["I just started a new job.", "Why are you wearing a suit?", "Yes? Did you need something?", "When is this due?", "How's it going over there?", "Can you give me the details?", "Why are you studying so late?", "Any vacation plans?", "How's your new job?", "We still have a lot to do."],
+        W10: ["Welcome to our cafe.", "Why didn't you answer?", "I can't talk right now.", "Can you look it up on your phone?", "I took a great picture of us.", "Hello? Hello?", "Are you coming to the meeting?", "Why is the video not loading?", "Why is your phone dead?", "I'm busy right now."],
+        W11: ["What did you do this afternoon?", "Look at that blue sky.", "Look at those dark clouds.", "What do you do for fun?", "I play tennis on weekends.", "How do you know each other?", "What are you watching these days?", "I love movies.", "Why are you wearing a coat?", "I've been sitting all day."],
+        W12: ["You have your interview today, right?", "Do you think it will work?", "They're closing the old bookstore.", "I got the job!", "You forgot her birthday?", "Why don't you take a plane?", "How was your day?", "Are you okay? You're so quiet.", "Surprise! I'm here!", "Do you want to keep going?"],
+        S1: ["I'm in a meeting right now.", "I'm starving.", "Do you want another coffee?", "Do you want to go out tonight?", "I'm free all day.", "I'm not sure if I can come.", "What time does it start?", "We're not doing anything tonight.", "Can you come out tonight?", "Are you ready? We're leaving."],
+        S2: ["I won the lottery!", "She's moving to Japan.", "Who broke the glass?", "I'm so sorry I forgot.", "Would you like to come to my party?", "I passed my exam!", "We should leave earlier.", "Sorry, I spilled your coffee.", "Do you think he'll come?", "He ran fifty miles yesterday."],
+        S3: ["It was nice talking to you.", "I haven't seen you in months.", "I'm busy this week.", "The last bus just left.", "How was the trip?", "I don't have a car tonight.", "Are you coming out with us?", "There's a party tonight.", "So, what did you think?", "I brought you some coffee."],
+        S4: ["Let's go shopping.", "How much is this coffee?", "Oh no, I forgot my wallet.", "Why aren't you at work?", "Can you come hiking tomorrow?", "Where are you going?", "I never see you anymore.", "You look happy. What happened?", "Here's the bill.", "It's half price today."],
+        S5: ["It's ringing again.", "How's the puzzle going?", "Can you make an omelet?", "What are you looking for?", "I'm going to bed.", "Try one more time.", "Where are you going?", "Is this new app any good?", "The printer is broken again.", "Are you ready to order?"]
+    };
+    LESSONS.forEach(L => { const c = CUES[L.id]; if (c) L.list.forEach((p, k) => { if (c[k]) p.cue = c[k]; }); });
+
+    // ===== Situácie k rozhovorom: čo má človek povedať, zadané zámerom (nie vetou na preklad). Poradie = poradie viet v lekcii. =====
+    const SIT = {
+        T1: ["Povedz, že každé ráno piješ kávu.", "Povedz, že pracuje v nemocnici.", "Povedz, že obvykle vstávaš o siedmej.", "Povedz, že vaši susedia majú psa.", "Povedz, že televíziu veľmi nepozeráš.", "Opýtaj sa, ako často cvičí.", "Povedz, že tvoj brat na gitare nehrá.", "Opýtaj sa, kedy otvára obchod.", "Povedz, že voda vrie pri sto stupňoch Celzia.", "Povedz, že potraviny nakupuješ vždy v sobotu."],
+        T2: ["Povedz, že práve varíš večeru.", "Povedz, že prší a nemáš dáždnik.", "Opýtaj sa, čo práve robí.", "Povedz, že deti sa hrajú na dvore.", "Povedz, že práve čakáš na autobus.", "Povedz, že sa ti telefón nenabíja.", "Povedz, že tento týždeň sa učíš angličtinu.", "Opýtaj sa, kto volá.", "Povedz, že nepočuješ, lebo hovorí príliš potichu.", "Povedz, že zajtra sa stretávaš s kamarátkou."],
+        T3: ["Povedz, že včera si bol/a v kine.", "Povedz, že minulý týždeň ste boli na výlete.", "Povedz, že si ho videl/a pred hodinou.", "Povedz, že si dobre nespal/a.", "Opýtaj sa, kde kúpil/a tie topánky.", "Povedz, že si volal/a, ale nezdvihol/a.", "Povedz, že minulý rok ste sa presťahovali.", "Povedz, že ráno si zmeškal/a autobus.", "Opýtaj sa, či včera pozeral/a zápas.", "Povedz, že kľúče si nechal/a doma."],
+        T4: ["Povedz, že si varil/a, keď volal/a.", "Opýtaj sa, čo robil/a včera večer o ôsmej.", "Povedz, že pršalo, keď ste vyšli von.", "Povedz, že pri jedle ste sa rozprávali.", "Povedz, že si nepozeral/a, kam ideš.", "Povedz, že deti spali, keď ste prišli domov.", "Opýtaj sa, kto telefonoval, keď si vošiel/vošla.", "Povedz, že si šoféroval/a a počúval/a hudbu.", "Povedz, že bolo hlučno a nič si nepočul/a.", "Povedz, že si čítal/a knihu, keď sa zotmelo."],
+        T5: ["Povedz, že zajtra bude pršať.", "Ponúkni, že pomôžeš s taškami.", "Povedz, že budúci týždeň ideš na dovolenku.", "Sľúb, že sa čoskoro ozveš.", "Sľúb, že nebudeš meškať.", "Opýtaj sa, čo bude robiť cez víkend.", "Povedz, že si myslíš, že sa mu to bude páčiť.", "Povedz, že zajtra začínaš nový kurz.", "Sľúb, že zavoláš, keď tam dorazíš.", "Povedz, že možno pôjdeš s kolegami na kávu."],
+        T6: ["Povedz, že zajtra o piatej budeš ešte pracovať.", "Povedz, že o hodinu budeš vo vlaku.", "Opýtaj sa, či bude zajtra večer doma.", "Povedz, že o týždeň o tomto čase budeš ležať na pláži.", "Opýtaj sa, či bude dnes večer potrebovať auto.", "Povedz, že zajtra o desiatej budeš na porade.", "Povedz, že budete čakať pred vchodom.", "Povedz, že na neho/ňu budeš myslieť.", "Povedz, že budeš variť, keď príde.", "Opýtaj sa, či tu bude ešte dlho."],
+        T7: ["Povedz, že tu žije päť rokov.", "Opýtaj sa, či už bol/a v Amerike.", "Povedz, že si stratil/a peňaženku.", "Povedz, že si ešte neobedoval/a.", "Povedz, že práve prišiel.", "Povedz, že tu čakáš už pol hodiny.", "Povedz, že suši si ešte nikdy nemal/a.", "Opýtaj sa, či už videl/a ten nový film.", "Povedz, že ste všetko dokončili.", "Povedz, že od pondelka pracuješ z domu."],
+        W1: ["Povedz, že ste sa dlho nevideli.", "Povedz, že ťa teší.", "Pozdrav a opýtaj sa, ako sa má.", "Povedz, že sa máš dobre, poďakuj a opýtaj sa späť.", "Opýtaj sa, čo robil/a cez víkend.", "Ospravedlň sa, že pár minút meškáš.", "Povedz, že to nevadí, nech si nerobí starosti.", "Veľmi poďakuj za pomoc.", "Povedz, že nie je za čo, rád/rada pomôžeš.", "Rozlúč sa: čoskoro sa uvidíte, nech sa má."],
+        W2: ["Ospravedlň sa, že nerozumieš.", "Popros, nech to zopakuje.", "Popros, nech hovorí trochu pomalšie.", "Opýtaj sa, čo to znamená.", "Opýtaj sa, ako sa to píše.", "Povedz, že po anglicky hovoríš len trochu.", "Povedz, že rozumieš, a poďakuj.", "Povedz, že to slovo nepoznáš.", "Popros, nech ti to napíše.", "Ospravedlň sa a opýtaj sa, čo povedal/a."],
+        W3: ["Predstav svojho najlepšieho kamaráta.", "Opýtaj sa, či má súrodencov.", "Povedz, že tvoji rodičia žijú na Slovensku.", "Pozvi ho/ju na večeru.", "Povedz, že ti rodina veľmi chýba.", "Povedz, že by si ich niekedy rád/rada navštívil/a.", "Opýtaj sa, ako dlho sa už poznáte.", "Povedz, že pre teba veľa znamená.", "Povedz, že ho/ju naozaj ľúbiš.", "Opýtaj sa, či má na večer plány."],
+        W4: ["Popros o účet.", "Objednaj si kávu s mliekom.", "Povedz, že to chceš so sebou.", "Povedz, že si vegetarián/ka.", "Opýtaj sa, čo odporúča.", "Povedz, že si hladný/á, a navrhni ísť sa najesť.", "Popros o soľ.", "Pochváľ jedlo, je naozaj dobré.", "Povedz, že rád/rada varíš a pečieš.", "Navrhni ísť na kávu."],
+        W5: ["Opýtaj sa, či môžeš platiť kartou.", "Opýtaj sa, či to majú vo väčšej veľkosti.", "Opýtaj sa, či si to môžeš vyskúšať.", "Opýtaj sa, či je to v zľave.", "Povedz, že to chceš vrátiť.", "Opýtaj sa, kde sú najbližšie potraviny.", "Povedz, že potrebuješ nové topánky.", "Opýtaj sa, koľko to stojí.", "Povedz, že je to pre teba pridrahé.", "Povedz, že sa nevieš rozhodnúť, čo si obliecť."],
+        W6: ["Opýtaj sa, kde je najbližšia zastávka autobusu.", "Opýtaj sa, ako sa dostaneš na letisko.", "Opýtaj sa, kedy ide ďalší vlak.", "Vypýtaj si jeden lístok do centra.", "Popros, nech ti na mape ukáže, kde ste.", "Povedz, že si sa stratil/a.", "Povedz, že potrebuješ taxík na letisko.", "Povedz, že let meškal.", "Opýtaj sa, kde sa dá natankovať.", "Povedz, že máš rezervovanú izbu na dve noci."],
+        W7: ["Povedz, že ti nie je dobre.", "Povedz, že ťa bolí hlava.", "Povedz, že potrebuješ ísť k lekárovi.", "Povedz, že máš horúčku a kašeľ.", "Opýtaj sa, kde je najbližšia lekáreň.", "Povedz, že si alergický/á na penicilín.", "Povedz, že potrebuješ termín na zajtra.", "Ukáž a povedz, že to bolí tu.", "Opýtaj sa, ako často to máš brať.", "Zakrič, nech zavolajú sanitku."],
+        W8: ["Popros, nech vynesie smeti.", "Povedz, že v byte netečie teplá voda.", "Popros, nech zasvieti.", "Povedz, že kľúče sú na kuchynskom stole.", "Povedz, že nájom platíš prvého v mesiaci.", "Povedz, že hľadáš nový byt.", "Povedz, že výťah nefunguje.", "Popros, nech pozametá.", "Povedz, že dnes musíš upratať byt.", "Povedz, že práčka sa zase pokazila."],
+        W9: ["Opýtaj sa, čo robí (akú má prácu).", "Povedz, že dnes máš dôležitú poradu.", "Opýtaj sa, či môžeš dnes odísť skôr.", "Povedz, že termín je v piatok.", "Povedz, že s tým potrebuješ pomôcť.", "Povedz, že pošleš e-mail.", "Povedz, že zajtra máš test.", "Povedz, že budúci týždeň si berieš voľno.", "Povedz, že máš veľmi milých kolegov.", "Navrhni dokončiť to do konca dňa."],
+        W10: ["Opýtaj sa na heslo na Wi-Fi.", "Povedz, že nemáš signál.", "Povedz, nech ti pošle správu.", "Povedz, že máš takmer vybitú batériu.", "Popros, nech ti pošle tú fotku.", "Opýtaj sa, či ťa dobre počuje.", "Povedz, že o piatej sa pripojíš na videohovor.", "Povedz, že internet je dnes veľmi pomalý.", "Povedz, že si si zabudol/zabudla nabiť telefón.", "Popros, nech ti zavolá neskôr večer."],
+        W11: ["Povedz, že si bol/a na prechádzke v parku.", "Povedz, že dnes je vonku naozaj pekne.", "Povedz, že si myslíš, že bude pršať.", "Povedz, že vo voľnom čase rád/rada čítaš knihy.", "Opýtaj sa, čo rád/rada robí vo voľnom čase.", "Povedz, že každý týždeň spolu hráte futbal.", "Povedz, že pozeráš nový seriál na Netflixe.", "Opýtaj sa na obľúbený film.", "Povedz, že dnes je vonku naozaj zima.", "Navrhni ísť na prechádzku."],
+        W12: ["Povedz, že si dnes veľmi nervózny/a.", "Povedz, že z toho máš dobrý pocit.", "Povedz, že je ti z toho smutno.", "Povedz, že si rád/rada, že to vyšlo.", "Povedz, že sa hneváš sám/sama na seba.", "Povedz, že sa bojíš lietania.", "Povedz, že si úplne vyčerpaný/á.", "Povedz, že si dnes trochu unavený/á.", "Povedz, že ho/ju naozaj rád/rada vidíš.", "Povedz, že si potrebuješ trochu oddýchnuť."],
+        S1: ["Povedz, že zavoláš neskôr.", "Navrhni ísť na pizzu.", "Povedz, že už musíš ísť.", "Povedz, že si tak trochu unavený/á.", "Opýtaj sa, čo chce robiť.", "Povedz, nech ti dá vedieť.", "Povedz, že nevieš.", "Opýtaj sa ich všetkých, či idú s vami.", "Povedz, že sa musíš učiť, lebo máš test.", "Popros o minútku."],
+        S2: ["Povedz, že tomu nemôžeš uveriť.", "Prekvapene sa opýtaj, či naozaj.", "Ospravedlň sa, bola to tvoja chyba.", "Povedz, že o nič nejde.", "Povedz, že jasné, veľmi rád/rada.", "Povedz, že je to skvelé.", "Povedz, že má pravdu.", "Povedz, že je všetko v pohode.", "Povedz, že sa uvidí.", "Povedz, že je to šialené."],
+        S3: ["Opýtaj sa, či si niekedy niekam vyrazíte.", "Povedz, že si musíte pokecať, čo je nové.", "Povedz, nech ti napíše, keď bude mať čas.", "Opýtaj sa, či môžeš dnes prespať u neho/nej.", "Povedz, že minulý víkend ste sa mali skvele.", "Povedz, že ho/ju vyzdvihneš o ôsmej.", "Povedz, že dnes večer ostávaš doma.", "Povedz, že sa ti nechce ísť von.", "Povedz, že ten film bol skvelý.", "Povedz, že je najlepší/najlepšia."],
+        S4: ["Povedz, že nemáš žiadne peniaze.", "Povedz, že to stojí päť dolárov.", "Povedz, že zaplatíš za neho/ňu.", "Povedz, že si sa v práci ohlásil/a ako chorý/á.", "Povedz, že zajtra máš voľno.", "Povedz, že ideš do práce.", "Povedz, že máš veľa práce.", "Povedz, že ťa povýšili.", "Opýtaj sa, či si účet rozdelíte.", "Povedz, že je to dobrá cena."],
+        S5: ["Povedz, nech zdvihne telefón.", "Povedz, že na to nevieš prísť.", "Povedz, že vám došli vajcia.", "Povedz, že hľadáš kľúče.", "Popros, nech zhasne svetlo.", "Povedz, že to vzdávaš.", "Povedz, že sa hneď vrátiš.", "Povedz, nech to vyskúša.", "Povedz, že sa na to pozrieš.", "Povedz, nech chvíľu počká."]
+    };
+    LESSONS.forEach(L => { const c = SIT[L.id]; if (c) L.list.forEach((p, k) => { if (c[k]) p.sit = c[k]; }); });
+
     const SESSION_SIZE = 4;
     const DAY = 24 * 60 * 60 * 1000;
     // Rozložené opakovanie (Leitner) - rovnaký princíp ako v "05 Vzdelavanie":
@@ -1170,8 +1245,8 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
         if (text === 'Pripravené...') text = '';
         fb.className = cls ? 'feedback-box ' + cls : 'feedback-box';
         fb.innerText = text;
-        if (cls === 'fail' || (cls === 'warning' && !/^Počúvam/.test(text))) document.body.classList.add('show-manual');
-        else if (!cls) document.body.classList.remove('show-manual');
+        if (cls === 'fail' || (cls === 'warning' && !/^(Počúvam|Vyhodnocujem|Sťahujem)/.test(text))) document.body.classList.add('show-manual');
+        else if (!cls || cls === 'success') document.body.classList.remove('show-manual');   // po úspechu nič navyše neruší
     }
 
     // ===== Rozložené opakovanie =====
@@ -1208,8 +1283,14 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
         const a = document.getElementById('streak-counter');
         const b = document.getElementById('progress-counter');
         const bar = document.getElementById('progress-bar');
-        if (a) a.innerText = `🎓 Naučené: ${m} / ${total}`;
-        if (bar) bar.style.width = `${pct}%`;
+        if (bezCitania()) {
+            const h = zHlavyCount();
+            if (a) a.innerText = `🗣 Poviem z hlavy: ${h} ${vetaWord(h)}`;
+            if (bar) bar.style.width = `${total > 0 ? Math.round(100 * h / total) : 0}%`;
+        } else {
+            if (a) a.innerText = `🎓 Naučené: ${m} / ${total}`;
+            if (bar) bar.style.width = `${pct}%`;
+        }
         const d = dueCount();
         const dd = dayState().done;
         if (b) b.innerText = `Dnes ${dd} / ${DAY_GOAL}` + (dd >= DAY_GOAL ? ' 🌸' : '');
@@ -1329,7 +1410,7 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
         document.body.classList.toggle('show-kb', on);
         if (on) { const i = document.getElementById('dictation-input'); if (i) try { i.focus({ preventScroll: true }); } catch (e) {} }
     }
-    function micUsable() { return sttSupported && !micFailed; }
+    function micUsable() { return useOwn() ? !micFailed : (sttSupported && !micFailed); }
 
     // Nativny <details>/<summary> - prehliadač sám vie rozbaliť/zabaliť obsah
     // na kliknutie, žiadna vlastná JS logika na otváranie/zatváranie, ktorá by
@@ -1439,8 +1520,9 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
         // Diktovacie políčko je vždy dostupné ako alternatíva - vstavané rozpoznávanie reči
         // (najmä na iPhone, aj v Chrome, aj v Safari) sa v praxi nespráva vždy rovnako spoľahlivo,
         // takže sa naň nedá vždy spoľahnúť len podľa toho, či prehliadač API ponúka.
-        if (sttSupported) document.body.classList.add('stt');
-        if (!sttSupported) {
+        if (sttSupported || useOwn()) document.body.classList.add('stt');
+        if (useOwn() && userState.name) setTimeout(ownLoad, 600);   // model sa pripraví vopred
+        if (!sttSupported && !useOwn()) {
             const micBtn = document.getElementById('mic-btn');
             if (micBtn) micBtn.style.display = 'none';
             const note = document.getElementById('dictation-note');
@@ -1484,6 +1566,7 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
         rec.onstart = () => {
             if (rec !== recognition) return;
             rec._ukoncene = false;
+            micStartT = Date.now(); micReakcia = null;
             micLogAdd('zapnutý'); armWatchdog(); armMaxCas(rec);
             __recognitionTranscript = "";
             suppressEnd = false;
@@ -1571,6 +1654,14 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
             }
             if (err === 'no-speech' || err === 'aborted') return;
             if (autoStarted && err === 'not-allowed') { setFeedback('', ''); setMicNudge(true); return; } // automatický štart bez ťuknutia iPhone niekedy nedovolí - stačí ťuknúť na 🎤
+            if (err === 'service-not-allowed' && ownMozne) {
+                micLogAdd('vstavané rozpoznávanie zakázané → rozpoznávanie v zariadení');
+                userState.settings.ownStt = true; writeJSON('qen_settings', userState.settings);
+                syncSettingsUI(); ownPrepni();
+                setFeedback('warning', 'Prepol som na rozpoznávanie reči v zariadení. Ťukni na 🎤 a povedz vetu.');
+                setMicNudge(true);
+                return;
+            }
             if (err === 'not-allowed' || err === 'service-not-allowed' || err === 'audio-capture') {
                 micFailed = true;
                 nastavMic('chyba');
@@ -1616,12 +1707,12 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
     function dokoncenieRec(rec) {
         rec.onaudiostart = () => { if (rec !== recognition || !isListening) return; micLogAdd('počuje zvuk'); micAudioZnamy = true; micAudioPrislo = true; clearAudioKontrola(); nastavMic('audio'); };
         rec.onsoundstart = () => { if (rec !== recognition || !isListening) return; micAudioPrislo = true; clearAudioKontrola(); nastavMic('zvuk'); };
-        rec.onspeechstart = () => { if (rec !== recognition || !isListening) return; micLogAdd('počuje reč'); micAudioPrislo = true; clearAudioKontrola(); nastavMic('rec'); };
+        rec.onspeechstart = () => { if (rec !== recognition || !isListening) return; if (micReakcia === null) micReakcia = (Date.now() - micStartT) / 1000; micLogAdd('počuje reč'); micAudioPrislo = true; clearAudioKontrola(); nastavMic('rec'); };
         return rec;
     }
 
     function startListening(auto) {
-        if (!sttSupported) return;
+        if (!sttSupported && !useOwn()) return;
         if (isIOS) {
             // iPhone: mikrofón zapnutý počas/hneď po čítaní vety sa zasekne natrvalo → počkať 1 s od konca čítania
             try { if (window.speechSynthesis && window.speechSynthesis.speaking) stopSpeaking(); } catch (e) {}
@@ -1633,6 +1724,7 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
                 return;
             }
         }
+        if (useOwn()) { if (auto && own.state !== 'idle') return; ownStart(auto); return; }
         autoStarted = !!auto;
         setMicNudge(false);
         vykonajOpravu({ typ: 'nova-veta' });
@@ -1666,6 +1758,7 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
         }
     }
     function stopListeningNow() {
+        if (useOwn()) { ownCancel(); stopListeningState(); return; }
         clearWatchdog();
         if (recognition && isListening) {
             if (isIOS && micRezim.rezim === 'nova') { const old = recognition; recognition = null; try { old.abort(); } catch (e) {} }
@@ -1867,8 +1960,590 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
         if (!sttSupported || isIOS) return;   // iPhone: správanie mikrofónu ako v overenej pôvodnej verzii
         vykonajOpravu({ typ: document.hidden ? 'skryte' : 'viditelne', cas: Date.now() });
     });
+    // ===== Vlastné rozpoznávanie reči priamo v zariadení (Whisper) =====
+    // iPhone: vstavané rozpoznávanie (webkitSpeechRecognition) funguje len v karte Safari. V Chrome na iPhone
+    // a v appke na ploche ho Apple nepovoľuje (chyba service-not-allowed) – preto si appka zvuk nahrá sama
+    // (getUserMedia) a prepíše ho modelom Whisper, ktorý sa raz stiahne a potom beží v telefóne aj bez internetu.
+    const OWN_LIB = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1';
+    const OWN_MODELS = { rychly: 'Xenova/whisper-tiny.en', presny: 'Xenova/whisper-base.en' };
+    const ownMozne = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && (window.AudioContext || window.webkitAudioContext) && window.WebAssembly);
+    function useOwn() {
+        if (!ownMozne) return false;
+        const v = userState.settings.ownStt;
+        if (v === true) return true;
+        if (v === false) return !sttSupported;
+        return isIOS || !sttSupported;
+    }
+    const own = { state: 'idle', seq: 0, stream: null, ctx: null, src: null, proc: null, mute: null, chunks: [], n: 0, sr: 48000,
+                  noise: 0.004, speechAt: -1, lastSpeechAt: -1, hot: 0, guard: null, busyTimer: null, lvl: -1,
+                  worker: null, mainAsr: null, modelName: '', ready: false, loading: false, prog: {}, pct: 0, waiters: [], jobs: {}, jobId: 0, err: '' };
+    function ownModel() { return userState.settings.ownPresny ? OWN_MODELS.presny : OWN_MODELS.rychly; }
+    function ownWorkerSrc() {
+        return "import { pipeline, env } from '" + OWN_LIB + "';\n" +
+            "env.allowLocalModels = false;\n" +
+            "let asr = null, loading = null;\n" +
+            "function load(model) {\n" +
+            "  if (!loading) loading = pipeline('automatic-speech-recognition', model, { dtype: 'q8', device: 'wasm',\n" +
+            "    progress_callback: p => { if (p && p.status === 'progress') postMessage({ type: 'progress', p: { status: p.status, file: p.file, loaded: p.loaded, total: p.total } }); } })\n" +
+            "    .then(x => { asr = x; postMessage({ type: 'ready' }); });\n" +
+            "  return loading;\n" +
+            "}\n" +
+            "onmessage = async (e) => {\n" +
+            "  const m = e.data;\n" +
+            "  if (m.type === 'load') { try { await load(m.model); } catch (err) { loading = null; postMessage({ type: 'loaderror', message: String(err && err.message || err) }); } return; }\n" +
+            "  if (m.type === 'run') { try { await load(m.model); const out = await asr(m.audio); postMessage({ type: 'result', id: m.id, text: (out && out.text) || '' }); }\n" +
+            "    catch (err) { postMessage({ type: 'error', id: m.id, message: String(err && err.message || err) }); } }\n" +
+            "};\n";
+    }
+    function ownReset() {
+        if (own.worker) { try { own.worker.terminate(); } catch (e) {} }
+        own.worker = null; own.mainAsr = null; own.ready = false; own.loading = false; own.prog = {}; own.pct = 0; own.err = '';
+        const w = own.waiters; own.waiters = []; w.forEach(x => x.reject(new Error('zrušené')));
+        const j = own.jobs; own.jobs = {}; Object.keys(j).forEach(k => j[k].reject(new Error('zrušené')));
+    }
+    // Stiahne a pripraví model (raz; potom je uložený v zariadení).
+    function ownLoad() {
+        const model = ownModel();
+        if (own.modelName === model && (own.ready || own.loading)) return;
+        ownReset();
+        own.modelName = model; own.loading = true;
+        micLogAdd('model: načítavam ' + model.split('/')[1]);
+        ownStatus();
+        try {
+            const url = URL.createObjectURL(new Blob([ownWorkerSrc()], { type: 'text/javascript' }));
+            const w = new Worker(url, { type: 'module' });
+            own.worker = w;
+            w.onmessage = (e) => ownMsg(w, e.data);
+            w.onerror = (e) => {
+                if (own.worker !== w) return;
+                try { e.preventDefault && e.preventDefault(); } catch (x) {}
+                micLogAdd('model: vlákno na pozadí nejde → hlavné vlákno');
+                own.worker = null; try { w.terminate(); } catch (x) {}
+                ownLoadMain(model);
+            };
+            w.postMessage({ type: 'load', model: model });
+        } catch (e) { own.worker = null; ownLoadMain(model); }
+    }
+    function ownLoadMain(model) {
+        import(OWN_LIB).then(m => {
+            m.env.allowLocalModels = false;
+            return m.pipeline('automatic-speech-recognition', model, { dtype: 'q8', device: 'wasm',
+                progress_callback: p => { if (p && p.status === 'progress' && own.modelName === model) ownMsg(null, { type: 'progress', p: p }); } });
+        }).then(asr => {
+            if (own.modelName !== model || own.worker) return;
+            own.mainAsr = asr; ownMsg(null, { type: 'ready' });
+        }).catch(err => { if (own.modelName === model && !own.worker) ownMsg(null, { type: 'loaderror', message: String(err && err.message || err) }); });
+    }
+    function ownMsg(w, m) {
+        if (w && w !== own.worker) return;
+        if (m.type === 'progress') {
+            if (m.p && m.p.total) own.prog[m.p.file] = [m.p.loaded || 0, m.p.total];
+            let a = 0, b = 0; Object.keys(own.prog).forEach(k => { a += own.prog[k][0]; b += own.prog[k][1]; });
+            const pct = b ? Math.min(99, Math.floor(100 * a / b)) : 0;
+            if (pct !== own.pct) { own.pct = pct; ownStatus(); }
+        } else if (m.type === 'ready') {
+            own.ready = true; own.loading = false; own.err = '';
+            micLogAdd('model: pripravený');
+            ownStatus();
+            const ws = own.waiters; own.waiters = []; ws.forEach(x => x.resolve());
+        } else if (m.type === 'loaderror') {
+            own.loading = false; own.ready = false; own.err = m.message || 'chyba'; own.modelName = '';
+            micLogAdd('model: chyba ' + own.err);
+            ownStatus();
+            const ws = own.waiters; own.waiters = []; ws.forEach(x => x.reject(new Error(own.err)));
+        } else if (m.type === 'result' || m.type === 'error') {
+            const j = own.jobs[m.id]; if (!j) return;
+            delete own.jobs[m.id];
+            if (m.type === 'result') j.resolve(m.text); else j.reject(new Error(m.message));
+        }
+    }
+    function ownReady() {
+        if (own.ready && own.modelName === ownModel()) return Promise.resolve();
+        return new Promise((resolve, reject) => { own.waiters.push({ resolve, reject }); ownLoad(); });
+    }
+    function ownTranscribe(audio) {
+        return ownReady().then(() => {
+            if (own.worker) return new Promise((resolve, reject) => {
+                const id = ++own.jobId; own.jobs[id] = { resolve, reject };
+                own.worker.postMessage({ type: 'run', id: id, model: own.modelName, audio: audio }, [audio.buffer]);
+            });
+            return own.mainAsr(audio).then(o => (o && o.text) || '');
+        });
+    }
+    function ownStatusText() {
+        if (own.err) return 'Rozpoznávanie reči sa nepodarilo stiahnuť ❌ Pri prvom použití treba internet. Ťukni na „Vyskúšať mikrofón“.';
+        if (own.ready) return 'Rozpoznávanie reči je pripravené v zariadení ✅ (ide aj bez internetu)';
+        if (own.loading) return 'Sťahujem rozpoznávanie reči do zariadenia (len raz, asi ' + (userState.settings.ownPresny ? '80' : '40') + ' MB)… ' + own.pct + ' %';
+        return 'Rozpoznávanie reči v zariadení. Ťukni na „Vyskúšať mikrofón“.';
+    }
+    function ownStatus() {
+        if (!useOwn()) return;
+        const t = ownStatusText();
+        if (!micTest || own.state === 'idle') { const el = document.getElementById('mic-status'); if (el) el.textContent = t; }
+        if (own.state === 'busy' && !own.ready && !micTest) setFeedback('warning', t);
+    }
+    function ownUvolni(naozaj) {
+        if (own.guard) { clearTimeout(own.guard); own.guard = null; }
+        if (own.proc) { own.proc.onaudioprocess = null; try { own.proc.disconnect(); } catch (e) {} own.proc = null; }
+        if (own.src) { try { own.src.disconnect(); } catch (e) {} own.src = null; }
+        if (own.mute) { try { own.mute.disconnect(); } catch (e) {} own.mute = null; }
+        if (own.stream && (naozaj || !userState.settings.micKeep)) { own.stream.getTracks().forEach(t => t.stop()); own.stream = null; }
+        document.querySelectorAll('#mic-merac i').forEach(el => el.classList.remove('on'));
+    }
+    function ownCancel() {
+        own.seq++;
+        if (own.busyTimer) { clearTimeout(own.busyTimer); own.busyTimer = null; }
+        ownUvolni(false);
+        own.chunks = []; own.n = 0;
+        own.state = 'idle';
+    }
+    function ownStart(auto) {
+        mojHlas = null;
+        if (own.state !== 'idle') ownCancel();
+        const seq = ++own.seq;
+        autoStarted = !!auto;
+        setMicNudge(false);
+        nastavMic('start');
+        micLogAdd(auto ? 'štart (sám)' : 'štart (ťuknutie)');
+        own.state = 'starting';
+        ownLoad();
+        const AC = window.AudioContext || window.webkitAudioContext;
+        try {
+            if (!own.ctx || own.ctx.state === 'closed') own.ctx = new AC();
+            if (own.ctx.state !== 'running') { const r = own.ctx.resume(); if (r && r.catch) r.catch(() => {}); }
+        } catch (e) {}
+        const zivy = own.stream && own.stream.getAudioTracks().some(t => t.readyState === 'live');
+        const p = zivy ? Promise.resolve(own.stream)
+            : navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+        p.then(stream => {
+            if (seq !== own.seq) { if (stream !== own.stream) stream.getTracks().forEach(t => t.stop()); return; }
+            own.stream = stream;
+            store.set('qen_mic_ok', '1');
+            ownZapoj(seq);
+        }).catch(err => { if (seq === own.seq) ownChybaMic(err, auto); });
+    }
+    function ownZapoj(seq) {
+        const ctx = own.ctx;
+        if (!ctx) { ownChybaMic({ name: 'AudioContext' }, false); return; }
+        try { if (ctx.state !== 'running') { const r = ctx.resume(); if (r && r.catch) r.catch(() => {}); } } catch (e) {}
+        own.sr = ctx.sampleRate; own.chunks = []; own.n = 0; own.speechAt = -1; own.lastSpeechAt = -1; own.hot = 0; own.noise = 0.004; own.lvl = -1;
+        try {
+            own.src = ctx.createMediaStreamSource(own.stream);
+            own.proc = ctx.createScriptProcessor(4096, 1, 1);
+            own.mute = ctx.createGain(); own.mute.gain.value = 0;
+            own.proc.onaudioprocess = (e) => ownChunk(seq, e.inputBuffer.getChannelData(0));
+            own.src.connect(own.proc); own.proc.connect(own.mute); own.mute.connect(ctx.destination);
+        } catch (e) { ownChybaMic(e, false); return; }
+        own.state = 'rec';
+        isListening = true;
+        __recognitionTranscript = '';
+        micLogAdd('zapnutý');
+        nastavMic('audio');
+        if (micTest) {
+            const st = document.getElementById('mic-status'); if (st) st.textContent = 'Počúvam… povedz po anglicky napríklad „Hello, how are you?“';
+        } else {
+            const micBtn = document.getElementById('mic-btn');
+            if (micBtn) { micBtn.classList.add('listening'); micBtn.innerText = '🎤'; }
+            setFeedback('warning', (trainingStep === 'isolated_word' || (sessionPhrases[currentIndex] && sessionPhrases[currentIndex].isJustWord)) ? 'Počúvam slovo...' : 'Počúvam... Povedz vetu.');
+        }
+        // zvuk z mikrofónu neprichádza (iPhone bez ťuknutia zvuk nepustí) → vypnúť a požiadať o ťuknutie
+        own.guard = setTimeout(() => {
+            own.guard = null;
+            if (seq !== own.seq || own.state !== 'rec' || own.n > 0) return;
+            micLogAdd('zvuk neprichádza → ťukni na 🎤');
+            ownNic('Mikrofón nedáva zvuk. Ťukni znova na „Vyskúšať mikrofón“.');
+        }, 3000);
+    }
+    function ownNic(testText) {
+        const test = micTest;
+        ownCancel();
+        micTest = false;
+        stopListeningState();
+        if (test) { const st = document.getElementById('mic-status'); if (st) st.textContent = testText; }
+        else { setFeedback('', ''); setMicNudge(true); }
+    }
+    function ownChunk(seq, data) {
+        if (seq !== own.seq || own.state !== 'rec') return;
+        const c = new Float32Array(data);
+        own.chunks.push(c); own.n += c.length;
+        let s = 0; for (let i = 0; i < c.length; i++) s += c[i] * c[i];
+        const rms = Math.sqrt(s / c.length);
+        const t = own.n / own.sr;
+        const prah = Math.max(0.012, own.noise * 3.5);
+        if (rms > prah) {
+            own.hot++;
+            if (own.hot >= 2) {
+                if (own.speechAt < 0) { own.speechAt = Math.max(0, t - 3 * c.length / own.sr); micLogAdd('počuje reč'); nastavMic('rec'); }
+                own.lastSpeechAt = t;
+            }
+        } else {
+            own.hot = 0;
+            if (own.speechAt < 0) own.noise = own.noise * 0.9 + rms * 0.1;
+        }
+        const lvl = urovenZRms(rms);
+        if (lvl !== own.lvl) {
+            own.lvl = lvl;
+            const b = document.getElementById('mic-btn'); if (b) b.dataset.sila = Math.max(1, lvl);
+            document.querySelectorAll('#mic-merac i').forEach((el, i) => el.classList.toggle('on', i < lvl));
+        }
+        const jednoSlovo = !micTest && (trainingStep === 'isolated_word' || (sessionPhrases[currentIndex] && sessionPhrases[currentIndex].isJustWord));
+        if (own.speechAt >= 0 && t - own.lastSpeechAt > (jednoSlovo ? 0.9 : 1.3)) setTimeout(() => { if (seq === own.seq) ownFinish('ticho → koniec'); }, 0);
+        else if (own.speechAt < 0 && t > 7) setTimeout(() => { if (seq === own.seq && own.state === 'rec') { micLogAdd('nič nepočul → vypnutý'); ownNic('Nič som nepočul. Skús znova a hovor hlasnejšie.'); } }, 0);
+        else if (t > 15) setTimeout(() => { if (seq === own.seq) ownFinish('počúvanie 15 s → koniec'); }, 0);
+    }
+    function ownResample(pcm, sr) {
+        const pad = 4800;   // 0,3 s ticha na začiatku aj na konci
+        if (sr === 16000) { const o = new Float32Array(pcm.length + 2 * pad); o.set(pcm, pad); return o; }
+        const k = sr / 16000, n = Math.floor(pcm.length / k);
+        const out = new Float32Array(n + 2 * pad);
+        for (let i = 0; i < n; i++) {
+            const a = Math.floor(i * k), b = Math.min(pcm.length, Math.max(a + 1, Math.floor((i + 1) * k)));
+            let s = 0; for (let j = a; j < b; j++) s += pcm[j];
+            out[pad + i] = s / (b - a);
+        }
+        return out;
+    }
+    function ownFinish(dovod) {
+        if (own.state !== 'rec') return;
+        const seq = own.seq;
+        own.state = 'busy';
+        micLogAdd(dovod);
+        const sr = own.sr, total = own.n;
+        micReakcia = own.speechAt >= 0 ? own.speechAt : null;
+        const vsetko = new Float32Array(total);
+        let off = 0; own.chunks.forEach(c => { vsetko.set(c, off); off += c.length; });
+        own.chunks = []; own.n = 0;
+        let a = 0, b = total;
+        if (own.speechAt >= 0) { a = Math.max(0, Math.floor((own.speechAt - 0.5) * sr)); b = Math.min(total, Math.ceil((own.lastSpeechAt + 0.5) * sr)); }
+        ownUvolni(false);
+        const test = micTest;
+        stopListeningState();
+        if (b - a < sr * 0.15) { own.state = 'idle'; ownVysledok(''); return; }
+        { const it = sessionPhrases[currentIndex]; mojHlas = (test || !it || it.isRule) ? null : { pcm: vsetko.slice(a, b), sr: sr, text: it.isJustWord ? it.slang : (trainingStep === 'isolated_word' ? currentFailedWord : currentTarget(it)) }; }   // posledná nahrávka – dá sa vypočuť po vzore
+        const audio = ownResample(vsetko.subarray(a, b), sr);
+        nastavMic('text', 10);
+        if (test) { const st = document.getElementById('mic-status'); if (st) st.textContent = own.ready ? 'Vyhodnocujem…' : ownStatusText(); }
+        else setFeedback('warning', own.ready ? 'Vyhodnocujem…' : ownStatusText());
+        const t1 = Date.now();
+        own.busyTimer = setTimeout(() => { own.busyTimer = null; if (seq === own.seq && own.state === 'busy') ownZlyhalo('trvá to príliš dlho'); }, own.ready ? 45000 : 240000);
+        ownTranscribe(audio).then(text => {
+            if (seq !== own.seq) return;
+            if (own.busyTimer) { clearTimeout(own.busyTimer); own.busyTimer = null; }
+            own.state = 'idle';
+            micLogAdd('text (' + ((Date.now() - t1) / 1000).toFixed(1) + ' s): ' + text);
+            ownVysledok(text);
+        }).catch(err => { if (seq === own.seq) ownZlyhalo(String(err && err.message || err)); });
+    }
+    function ownZlyhalo(msg) {
+        micLogAdd('rozpoznávanie zlyhalo: ' + msg);
+        const test = micTest;
+        ownCancel();
+        micTest = false;
+        stopListeningState();
+        nastavMic('chyba');
+        const text = own.ready ? 'Rozpoznávanie reči teraz zlyhalo. Ťukni na 🎤 a skús znova, alebo použi ⌨️ klávesnicu.'
+                               : 'Rozpoznávanie reči sa nepodarilo stiahnuť. Pri prvom použití treba internet. Potom ťukni na 🎤, alebo použi ⌨️ klávesnicu.';
+        if (test) { const st = document.getElementById('mic-status'); if (st) st.textContent = text; }
+        else { toggleKeyboardRow(true); setFeedback('warning', text); }
+    }
+    function ownChybaMic(err, auto) {
+        const meno = (err && err.name) || 'chyba';
+        micLogAdd('chyba mikrofónu: ' + meno);
+        const test = micTest;
+        ownCancel();
+        micTest = false;
+        stopListeningState();
+        const zakaz = meno === 'NotAllowedError' || meno === 'SecurityError' || meno === 'PermissionDeniedError';
+        if (auto && zakaz && !test) { setFeedback('', ''); setMicNudge(true); return; }   // bez ťuknutia to iPhone niekedy nedovolí
+        nastavMic('chyba');
+        const text = zakaz ? 'Mikrofón nie je povolený ❌ iPhone: Nastavenia → Chrome (alebo Safari) → zapni Mikrofón. Potom ťukni na 🎤.'
+                           : 'Mikrofón nejde (' + meno + '). Skús znova, alebo použi ⌨️ klávesnicu.';
+        if (test) { const st = document.getElementById('mic-status'); if (st) st.textContent = text; }
+        else { toggleKeyboardRow(true); setFeedback('warning', text); }
+    }
+    // Whisper píše čísla číslicami ("7:30", "$5") – vety v appke ich majú slovom.
+    const OWN_J = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
+    const OWN_D = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
+    function ownCislo(n) {
+        if (n < 20) return OWN_J[n];
+        if (n < 100) return OWN_D[Math.floor(n / 10)] + (n % 10 ? ' ' + OWN_J[n % 10] : '');
+        if (n < 1000) return OWN_J[Math.floor(n / 100)] + ' hundred' + (n % 100 ? ' ' + ownCislo(n % 100) : '');
+        return String(n);
+    }
+    function ownCisla(text, target) {
+        if (/\d/.test(target || '') || !/\d/.test(text)) return text;
+        return text
+            .replace(/\$\s?(\d{1,3})\b/g, (m, a) => a + ' dollars')
+            .replace(/(\d{1,3})\s?%/g, (m, a) => a + ' percent')
+            .replace(/\b(\d{1,2}):(\d{2})\b/g, (m, h, mi) => h + (mi === '00' ? '' : ' ' + (mi[0] === '0' ? 'oh ' + mi[1] : mi)))
+            .replace(/\b\d{1,3}\b/g, (m) => ownCislo(parseInt(m, 10)));
+    }
+    function ownVysledok(text) {
+        let t = (text || '').replace(/\[[^\]]*\]|\([^)]*\)|[♪*]/g, ' ').replace(/\s+/g, ' ').trim();
+        stopListeningState();
+        if (micTest) {
+            micTest = false;
+            const st = document.getElementById('mic-status');
+            if (st) st.textContent = t ? 'Funguje ✅ Počul som: „' + t + '“' : 'Nič som nepočul. Skús znova a hovor hlasnejšie.';
+            return;
+        }
+        const cur = sessionPhrases[currentIndex];
+        if (!cur || cur.isRule) return;
+        if (!t) { setFeedback('', ''); setMicNudge(true); return; }
+        const ciel = cur.isJustWord ? cur.slang : (trainingStep === 'isolated_word' ? currentFailedWord : currentTarget(cur));
+        t = ownCisla(t, ciel);
+        __recognitionTranscript = t;
+        if (trainingStep === 'isolated_word') evaluateIsolatedWord(t);
+        else { if (!cur.isJustWord) liveHighlightWords(t); evaluateSpeech(t); }
+    }
+    function ownPrepni() {
+        const on = useOwn();
+        document.body.classList.toggle('stt', on || sttSupported);
+        const micBtn = document.getElementById('mic-btn');
+        if (micBtn) micBtn.style.display = (on || sttSupported) ? '' : 'none';
+        if (on) { micFailed = false; ownLoad(); } else { ownCancel(); ownUvolni(true); }
+        updateMicStatus();
+    }
+    // appka v pozadí → mikrofón pustiť
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden || !useOwn()) return;
+        if (own.state === 'starting' || own.state === 'rec') { micLogAdd('appka v pozadí → mikrofón vypnutý'); ownCancel(); micTest = false; stopListeningState(); }
+        ownUvolni(true);
+    });
+
+    // ===== Učenie bez čítania: počúvaj → povedz sám. Pokrok, ktorý človek cíti na sebe. =====
+    // Nová veta: zoznámenie (vidím, počujem, zopakujem). Ďalší deň: 👂 počúvam bez textu, vyberiem význam, zopakujem.
+    // Neskôr: 🗣 vidím len slovenčinu a anglicky to poviem z hlavy. Anglický text sa ukáže až po odpovedi.
+    let micReakcia = null, micStartT = 0;   // za koľko sekúnd od zapnutia mikrofónu začala reč
+    function bezCitania() { return userState.settings.bezCitania !== false; }
+    function fazaFor(item) {
+        if (!bezCitania() || testMode || !item || item.isRule || item.isJustWord) return 'citaj';
+        const r = userState.srs[item.id];
+        if (!r || !r.seen) return 'citaj';
+        const prah = smer().prah;
+        if (r.box < prah) return 'pocuvaj';
+        return (item.cue && r.h && r.box > prah) ? 'odpovedz' : 'povedz';   // rozhovor až keď vetu už raz povedal z hlavy
+    }
+    // Smer učenia podľa výsledkov za posledných 14 dní (aspoň 8 pokusov, inak vyvážene):
+    //  - málo rozumie na prvé počutie  → vety ostávajú dlhšie pri počúvaní, číta sa o niečo pomalšie
+    //  - nejde hovorenie z hlavy       → polovica nových viet, dlhšie opakovanie po sluchu
+    //  - oboje ide veľmi dobre         → z hlavy sa hovorí skôr, číta sa o niečo rýchlejšie (ako v živote)
+    function smer() {
+        const o = { prah: 2, nove: 1, tempo: 1, text: 'Vyvážene: počúvanie aj hovorenie z hlavy.' };
+        if (!bezCitania()) return o;
+        const d = dayIndex(), T = realSucet(d - 13, d);
+        const l = T.l[1] >= 8 ? T.l[0] / T.l[1] : null, h = T.s[1] >= 8 ? T.s[0] / T.s[1] : null;
+        if (l !== null && l < 0.7) { o.prah = 3; o.tempo = 0.85; o.text = 'Viac počúvania a pomalšie čítanie – na prvé počutie zatiaľ rozumieš menej.'; }
+        else if (h !== null && h < 0.6) { o.prah = 3; o.nove = 0.5; o.text = 'Menej nových viet a viac opakovania po sluchu, kým pôjde hovorenie z hlavy.'; }
+        else if (l !== null && h !== null && l >= 0.9 && h >= 0.85) { o.prah = 1; o.tempo = 1.1; o.text = 'Ide ti to: vety hovoríš z hlavy skôr a čítanie je rýchlejšie, ako v živote.'; }
+        return o;
+    }
+    function cistaVeta(p) { p._graded = false; p._drilled = false; p._faza = null; p._sub = null; p._odkryte = false; p._pomoc = false; p._lzle = false; p._lstat = false; p._stat = false; p._volby = null; p._bezSk = false; }
+    function volbyFor(item) {
+        if (item._volby) return item._volby;
+        const L = LESSON_BY_ID[item.lesson];
+        let pool = (L ? L.list : []).filter(p => p.id !== item.id && p.sk && p.sk !== item.sk);
+        if (pool.length < 2) pool = FULL_DATABASE.filter(p => p.id !== item.id && p.sk && p.sk !== item.sk);
+        const zle = shuffle(pool.slice()).slice(0, 2).map(p => p.sk);
+        item._volby = shuffle([item.sk].concat(zle));
+        return item._volby;
+    }
+    function kartaVety(item, words, tag) {
+        const faza = item._faza || (item._faza = fazaFor(item));
+        const skryt = faza !== 'citaj' && !item._odkryte;
+        if (faza === 'pocuvaj' && skryt && item._sub !== 'hovor' && (userState.srs[item.id] || {}).l) {
+            item._sub = 'hovor'; item._bezSk = true;   // význam už raz spoznal → žiadny výber, rovno zopakuj po sluchu
+        }
+        if (faza === 'pocuvaj' && skryt && item._sub !== 'hovor') {
+            item._sub = 'vyber';
+            const v = volbyFor(item);
+            return `<div class="card-tag">${esc('👂 Počúvaj (bez čítania)')}</div>
+                    <div class="pocuvaj-ikona" id="target-box">🔊</div>
+                    <div class="card-hint">Čo veta znamená?</div>
+                    ${v.map((t, i) => `<button class="secondary-btn volba-btn" id="volba-${i}" onclick="vyberVolbu(${i})">${esc(t)}</button>`).join('')}`;
+        }
+        const wrapped = words.map((w, i) => `<span class="word${skryt ? ' skryte' : ''}" id="word-${i}">${wrapLetters(w)}</span>`).join(' ');
+        const t = !skryt ? tag : faza === 'pocuvaj' ? '👂 Zopakuj, čo počuješ' : faza === 'odpovedz' ? '💬 Rozhovor: počúvaj a odpovedz' : '🗣 Povedz to po anglicky (z hlavy)';
+        const hint = '';
+        const skBezTextu = skryt && faza === 'pocuvaj' && item._bezSk;
+        const cueRiadok = (faza === 'odpovedz' && item.cue) ? `<div class="cue-riadok" id="cue-box" onclick="prehrajCue()">${skryt ? '🗨 🔊 …' : '🗨 ' + esc(item.cue)}</div>` : '';
+        return `<div class="card-tag">${esc(t)}</div>
+                ${cueRiadok}
+                <div class="sk-sentence" id="sk-veta">${skBezTextu ? '🇸🇰 …' : (skryt && faza === 'odpovedz' && item.sit) ? '🎯 ' + esc(item.sit) : '🇸🇰 ' + esc(item.sk)}</div>
+                <div class="slang-box" id="target-box">🇺🇸 <span id="words-container">${wrapped}</span></div>
+                <div class="card-hint" id="card-hint">${esc(hint)}</div>`;
+    }
+    // Na obrazovke je len to, čo práve treba: pri výbere významu žiadny mikrofón, pri hovorení z hlavy „Neviem“ namiesto „Prehrať“.
+    function syncFaza() {
+        const it = sessionPhrases[currentIndex];
+        const veta = !!it && !it.isRule && !it.isJustWord && trainingStep === 'sentence' && !it._odkryte;
+        document.body.classList.toggle('faza-vyber', veta && it._faza === 'pocuvaj' && it._sub === 'vyber');
+        const b = document.getElementById('btn-prehrat');
+        if (b) b.textContent = (veta && (it._faza === 'povedz' || it._faza === 'odpovedz') && !it._pomoc) ? '💡 Neviem, pomôž' : '🔊 Prehrať';
+        if (it && it._odkryte) {
+            const sv = document.getElementById('sk-veta'); if (sv && it.sk) sv.textContent = '🇸🇰 ' + it.sk;
+            const cb = document.getElementById('cue-box'); if (cb && it.cue) cb.textContent = '🗨 ' + it.cue;
+        }
+        const mh = document.getElementById('btn-mojhlas'); if (mh) mh.style.display = mojHlas ? '' : 'none';
+    }
+    let mojHlas = null;
+    // Najprv vzor, hneď po ňom vlastná nahrávka – ucho samo počuje rozdiel.
+    function prehrajMojHlas() {
+        const h = mojHlas, item = sessionPhrases[currentIndex];
+        if (!h || !item || item.isRule) return;
+        stopListeningNow(); stopSpeaking();
+        const text = h.text;
+        const ja = () => {
+            try {
+                const AC = window.AudioContext || window.webkitAudioContext;
+                if (!own.ctx || own.ctx.state === 'closed') own.ctx = new AC();
+                if (own.ctx.state !== 'running') { const r = own.ctx.resume(); if (r && r.catch) r.catch(() => {}); }
+                const buf = own.ctx.createBuffer(1, h.pcm.length, h.sr);
+                buf.getChannelData(0).set(h.pcm);
+                const src = own.ctx.createBufferSource(); src.buffer = buf; src.connect(own.ctx.destination); src.start();
+            } catch (e) { micLogAdd('môj hlas: ' + (e && e.message || e)); }
+        };
+        if (!('speechSynthesis' in window)) { ja(); return; }
+        const u = new SpeechSynthesisUtterance(text);
+        u.lang = 'en-US'; u.rate = parseFloat(userState.settings.rate || '1.0');
+        const v = (userState.settings.voiceName && availableVoices.find(x => x.name === userState.settings.voiceName)) || (availableVoices[0] && availableVoices[0]._rod ? availableVoices[0] : null);
+        if (v) { u.voice = v; u.lang = v.lang || 'en-US'; }
+        let raz = false; const potom = () => { if (raz) return; raz = true; ttsKoniec = Date.now(); setTimeout(ja, 350); };
+        u.onend = potom; u.onerror = potom;
+        window.speechSynthesis.speak(u);
+    }
+    function prehrajCue() { const it = sessionPhrases[currentIndex]; if (it && it.cue && it._faza === 'odpovedz' && !isTransitioning) speakCurrentPhrase(it._odkryte ? undefined : 'cue'); }
+    // Koniec dennej dávky: jasná bodka namiesto nekonečného pokračovania.
+    function renderDenHotovo(uloha) {
+        sessionPhrases = []; currentIndex = 0; trainingStep = 'sentence';
+        stopSpeaking(); stopListeningNow(); clearSavedSession();
+        const d = realDen();
+        const riadky = [];
+        if (d.s[1]) riadky.push(`Z hlavy si dnes povedal/a ${d.s[0]} z ${d.s[1]} viet.`);
+        if (d.l[1]) riadky.push(`Na prvé počutie si rozumel/a ${d.l[0]} z ${d.l[1]}.`);
+        if (uloha) riadky.push('Úloha do života: povedz dnes niekomu nahlas');
+        document.getElementById('card-content').innerHTML = `
+            <h3 class="done-title">Na dnes hotovo 🌸</h3>
+            <p class="done-text">${riadky.map(esc).join('<br>')}${uloha ? '<br><b>' + esc(uloha) + '</b>' : ''}<br>Appku môžeš zavrieť. Zajtra pokračujeme.</p>
+            <button class="secondary-btn stack-btn" onclick="generateNextSession({ flow: true })">Chcem ešte pokračovať</button>`;
+        syncFaza();
+        setFeedback('', 'Pripravené...');
+        updateStats();
+    }
+    function vyberVolbu(i) {
+        const item = sessionPhrases[currentIndex];
+        if (!item || item._faza !== 'pocuvaj' || item._sub !== 'vyber' || isTransitioning || !item._volby) return;
+        const ok = item._volby[i] === item.sk;
+        if (!item._lstat) { item._lstat = true; const d = realDen(); d.l[1]++; if (ok) d.l[0]++; savePlan(); }
+        if (!ok) {
+            item._lzle = true;
+            const b = document.getElementById('volba-' + i); if (b) { b.classList.add('zle'); b.disabled = true; }
+            speakCurrentPhrase(true);
+            setFeedback('fail', 'To nie je ono. Vypočuj si to ešte raz.');
+            document.body.classList.remove('show-manual');
+            return;
+        }
+        item._sub = 'hovor';
+        if (!item._lzle) { srsOf(item.id).l = 1; writeJSON('qen_srs', userState.srs); }
+        renderTrainer();
+        setFeedback('success', 'Rozumieš ✅ Teraz to povedz nahlas po anglicky.');
+    }
+    // --- čísla o tom, čo zvládnem bez čítania (ukladajú sa v qen_plan, sú aj v zálohe) ---
+    function realGet() {
+        const p = planGet();
+        if (!p.real || typeof p.real !== 'object' || Array.isArray(p.real)) p.real = { dni: {}, zivot: 0 };
+        if (!p.real.dni || typeof p.real.dni !== 'object') p.real.dni = {};
+        if (typeof p.real.zivot !== 'number') p.real.zivot = 0;
+        return p.real;
+    }
+    function realDen() {
+        const R = realGet(), d = dayIndex();
+        if (!R.dni[d]) {
+            R.dni[d] = { l: [0, 0], s: [0, 0], rt: [0, 0] };
+            Object.keys(R.dni).forEach(k => { if (+k < d - 60) delete R.dni[k]; });
+        }
+        return R.dni[d];
+    }
+    function realSucet(od, po) {
+        const R = realGet(), o = { l: [0, 0], s: [0, 0], rt: [0, 0] };
+        for (let d = od; d <= po; d++) { const x = R.dni[d]; if (!x) continue; ['l', 's', 'rt'].forEach(k => { if (x[k]) { o[k][0] += x[k][0] || 0; o[k][1] += x[k][1] || 0; } }); }
+        return o;
+    }
+    function zHlavyCount() { return FULL_DATABASE.filter(p => { const r = userState.srs[p.id]; return r && r.h; }).length; }
+    function realZapis(item, ok) {
+        if (item._stat || testMode) return;
+        item._stat = true;
+        if (item._faza !== 'povedz' && item._faza !== 'odpovedz') return;
+        const d = realDen();
+        d.s[1]++;
+        if (ok) {
+            d.s[0]++;
+            if (typeof micReakcia === 'number' && micReakcia >= 0 && micReakcia < 15) { d.rt[0] += micReakcia; d.rt[1]++; }
+            srsOf(item.id).h = 1;
+            writeJSON('qen_srs', userState.srs);
+            planGet().zHlavyNaposledy = item.id;
+        }
+        savePlan();
+        updateStats();
+    }
+    function renderPokrok() {
+        const el = document.getElementById('pokrok-box'); if (!el) return;
+        const d = dayIndex(), T = realSucet(d - 6, d), M = realSucet(d - 13, d - 7);
+        const pct = x => x[1] ? Math.round(100 * x[0] / x[1]) + ' %' : '—';
+        const rt = x => x[1] ? (x[0] / x[1]).toFixed(1).replace('.', ',') + ' s' : '—';
+        const riadok = (co, teraz, pred) => `<div class="pokrok-riadok"><span>${co}</span><span><b>${teraz}</b> <small>predtým ${pred}</small></span></div>`;
+        el.innerHTML = `<h4>📈 Môj pokrok (posledných 7 dní)</h4>
+            <div class="style-help"><div class="sh-intro">Čo zvládneš bez čítania — tak ako v živote. Podľa toho appka sama mení, čo ti dáva.<br><b>Smer učenia teraz:</b> ${esc(smer().text)}</div></div>
+            ${riadok('🗣 Povedané z hlavy', T.s[0] + ' ' + vetaWord(T.s[0]), M.s[0])}
+            ${riadok('👂 Rozumiem na prvé počutie', pct(T.l), pct(M.l))}
+            ${riadok('⚡ Začnem hovoriť za', rt(T.rt), rt(M.rt))}
+            <div class="pokrok-riadok"><span>🌍 Povedané v živote</span><span><b>${realGet().zivot}</b></span></div>
+            <div class="pokrok-riadok"><span>Spolu viem z hlavy</span><span><b>${zHlavyCount()}</b> <small>z ${FULL_DATABASE.length} viet</small></span></div>`;
+    }
+    // --- úloha do života: jednu vetu dnes povedať skutočnému človeku; zajtra sa appka spýta, či sa podarilo ---
+    function ulohaNova() {
+        const plan = planGet();
+        let item = FULL_DATABASE.find(p => p.id === plan.zHlavyNaposledy);
+        if (!item) item = FULL_DATABASE.filter(p => { const r = userState.srs[p.id]; return r && r.seen && r.box >= 2; }).pop();
+        if (!item) return '';
+        const text = currentTarget(item);
+        plan.uloha = { id: item.id, d: dayIndex(), text: text, hotovo: false };
+        savePlan();
+        return text;
+    }
+    function ulohaCaka() {
+        const U = planGet().uloha, d = dayIndex();
+        return !!(U && !U.hotovo && U.text && U.d < d && U.d >= d - 3);
+    }
+    function renderUlohaOtazka() {
+        const U = planGet().uloha;
+        sessionPhrases = []; currentIndex = 0; trainingStep = 'sentence';
+        stopSpeaking(); clearSavedSession();
+        document.getElementById('card-content').innerHTML = `
+            <h3 class="done-title">🌍 Úloha do života</h3>
+            <p class="done-text">Mal/a si niekomu nahlas povedať:<br><b>${esc(U.text)}</b><br>Podarilo sa?</p>
+            <button class="primary-btn" onclick="ulohaOdpoved(true)">Áno, povedal/a som to</button>
+            <button class="secondary-btn stack-btn" onclick="ulohaOdpoved(false)">Ešte nie</button>`;
+        setFeedback('', 'Pripravené...');
+        updateStats();
+    }
+    function ulohaOdpoved(ano) {
+        const U = planGet().uloha; if (U) U.hotovo = true;
+        if (ano) realGet().zivot++;
+        savePlan();
+        generateNextSession();
+        if (ano) setFeedback('success', 'Výborne! Toto je skutočný pokrok 🌍');
+    }
+
     function testMic() {
         const st = document.getElementById('mic-status');
+        if (useOwn()) {
+            stopSpeaking(); stopListeningNow();
+            micTest = true; micFailed = false;
+            if (st) st.textContent = 'Spúšťam mikrofón… (ak sa iPhone spýta, ťukni na Povoliť)';
+            ownStart(false);
+            return;
+        }
         if (!sttSupported) { if (st) st.textContent = 'Tento prehliadač webový mikrofón nepodporuje. Používaj ⌨️ klávesnicu.'; return; }
         stopSpeaking();
         stopListeningNow();
@@ -1901,6 +2576,7 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
         if (isTransitioning) { if ((tries || 0) < 15) setTimeout(() => autoListenAfterSpeak((tries || 0) + 1), 200); return; }
         const cur = sessionPhrases[currentIndex];
         if (!cur || cur.isRule) return;
+        if (cur._faza === 'pocuvaj' && cur._sub === 'vyber' && !cur._odkryte) return;   // najprv výber významu
         if (!document.getElementById('screen-trainer').classList.contains('active')) return;
         if (document.getElementById('settings-modal').open) return;
         setTimeout(() => { if (!isListening && !isTransitioning) startListening(true); }, isIOS ? 1000 : 250);
@@ -1910,6 +2586,7 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
     function updateMicStatus() {
         const el = document.getElementById('mic-status');
         if (!el) return;
+        if (useOwn()) { el.textContent = ownStatusText(); return; }
         if (!sttSupported) { el.textContent = 'Nepodporovaný na tomto zariadení - použi diktovanie cez klávesnicu.'; return; }
         if (store.get('qen_mic_ok', '') === '1') { el.textContent = 'Povolený ✅'; return; }
         if (navigator.permissions && navigator.permissions.query) {
@@ -1955,7 +2632,7 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
         return p.day;
     }
     function reviewCap() { return REVIEW_CAP + REVIEW_EXTRA * dayState().extra; }
-    function newQuota() { return NEW_QUOTA * (1 + Math.min(1, dayState().extra)); }
+    function newQuota() { return Math.max(4, Math.round(NEW_QUOTA * smer().nove)) * (1 + Math.min(1, dayState().extra)); }
     function dueItems() { const now = Date.now(); return FULL_DATABASE.filter(p => { const r = userState.srs[p.id]; return r && r.seen && r.due <= now; }); }
     // Brzda: kým čaká viac ako denná dávka + 5 viet, nová lekcia nepríde.
     function brakeOn() { return dueItems().length > REVIEW_CAP + 5; }
@@ -2033,6 +2710,7 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
             if (Object.keys(userState.srs).some(k => userState.srs[k] && userState.srs[k].seen)) { plan.test = 'skipped'; savePlan(); }
             else { renderTestIntro(); return; }
         }
+        if (!practiceMode && !opts.flow && ulohaCaka()) { renderUlohaOtazka(); return; }
         updateStats();
         const day = dayState();
         let list = [];
@@ -2060,14 +2738,14 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
             if (!list.length && opts.more) { practiceMode = true; list = practiceList(); }
             if (!list.length) {
                 // Denná dávka je hotová -> žiadna otázka, plynule ďalej
-                if (!day.goal) { day.goal = true; pendingNotice = 'Denný cieľ splnený 🌸 Môžeš pokračovať, alebo appku kľudne zavri.'; }
+                if (!day.goal) { day.goal = true; savePlan(); if (bezCitania()) { renderDenHotovo(ulohaNova()); return; } pendingNotice = 'Denný cieľ splnený 🌸 Môžeš pokračovať, alebo appku kľudne zavri.'; }
                 if (day.extra < 2 && !brakeOn() && freshItems().length) { day.extra++; savePlan(); return generateNextSession(opts); }
                 practiceMode = true;
                 list = practiceList();
             }
             savePlan();
         }
-        list.forEach(p => { p._graded = false; p._drilled = false; });
+        list.forEach(cistaVeta);
         if (list.length === 0) { renderAllDone(); return; }
         sessionPhrases = list;
         currentIndex = 0;
@@ -2278,12 +2956,7 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
                 const TL = LESSON_BY_ID[item.lesson];
                 const ltitle = (!testMode && TL) ? ' · ' + TL.title : '';
 
-                document.getElementById('card-content').innerHTML = `
-                    <div class="card-tag">${esc(dots + ltitle)}</div>
-                    <div class="sk-sentence">🇸🇰 ${esc(item.sk)}</div>
-                    <div class="slang-box" id="target-box">🇺🇸 <span id="words-container">${wrappedWords}</span></div>
-                    <div class="card-hint" id="card-hint"></div>
-                `;
+                document.getElementById('card-content').innerHTML = kartaVety(item, words, dots + ltitle);
             } else if (trainingStep === 'isolated_word') {
                 document.getElementById('card-content').innerHTML = `
                     <div class="isolated-word-box" id="target-box"><span class="word" id="word-0">${wrapLetters(currentFailedWord)}</span></div>
@@ -2292,6 +2965,7 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
             }
         }
 
+        syncFaza();
         saveSession();
         if (!isTransitioning) {
             setFeedback('', 'Pripravené...');
@@ -2299,7 +2973,7 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
         if (pendingNotice) { setFeedback('warning', pendingNotice); pendingNotice = ''; }
 
         setTimeout(() => {
-            speakCurrentPhrase();
+            speakCurrentPhrase(true);
         }, 350); 
     }
 
@@ -2309,10 +2983,11 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
         if (prev && !prev.isRule && !prev.isJustWord && !testMode) { dayState().done++; savePlan(); }
         trainingStep = 'sentence';
         currentIndex++;
+        mojHlas = null;
         renderTrainer();
     }
 
-    function speakCurrentPhrase() {
+    function speakCurrentPhrase(auto) {
         if (!('speechSynthesis' in window)) { autoListenAfterSpeak(0); return; }
         stopListeningNow();
         setMicNudge(false);
@@ -2320,21 +2995,38 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
 
         const item = sessionPhrases[currentIndex];
         if (!item || item.isRule) return;
+        const skryta = !item._odkryte && trainingStep === 'sentence' && !item.isJustWord;
+        const cueRezim = skryta && item._faza === 'odpovedz' && !!item.cue && (auto === true || auto === 'cue');   // rozhovor: zaznie veta „toho druhého“
+        if (skryta && !cueRezim && (item._faza === 'povedz' || item._faza === 'odpovedz')) {
+            // „Povedz z hlavy“: appka vetu vopred nečíta. Ťuknutie na 🔊 Prehrať = pomoc (veta sa zajtra vráti).
+            if (auto) { autoListenAfterSpeak(0); return; }
+            item._pomoc = true;
+            setFeedback('', 'Počúvaj a zopakuj. Veta sa zajtra vráti.');
+            syncFaza();
+        }
 
         let text = item.isJustWord ? item.slang : (trainingStep === 'isolated_word' ? currentFailedWord : currentTarget(item));
+        if (cueRezim) text = item.cue;
 
         const utterance = new SpeechSynthesisUtterance(text);
         utterance.lang = 'en-US';
-        utterance.rate = parseFloat(userState.settings.rate || '1.0');
+        utterance.rate = parseFloat(userState.settings.rate || '1.0') * ((item._faza === 'pocuvaj' && !item._odkryte && !item.isJustWord) ? smer().tempo : 1);
         {
             // zvolený hlas; „Predvolený“ = prvý z vybraných (Google US English, inak Samantha)
             const v = (userState.settings.voiceName && availableVoices.find(x => x.name === userState.settings.voiceName))
                 || (availableVoices[0] && availableVoices[0]._rod ? availableVoices[0] : null);
             if (v) { utterance.voice = v; utterance.lang = v.lang || 'en-US'; }
+            // Ako v živote: pri počúvaní bez textu a v rozhovore sa hlasy striedajú (ak ich zariadenie má viac).
+            const viac = availableVoices.filter(x => x._rod);
+            if (viac.length > 1 && skryta && (cueRezim || item._faza === 'pocuvaj')) {
+                let k = (Math.abs(parseInt(item.id, 10) || 0) + dayIndex()) % viac.length;
+                if (cueRezim && v && viac[k] === v) k = (k + 1) % viac.length;      // „ten druhý“ má iný hlas než vzor
+                utterance.voice = viac[k]; utterance.lang = viac[k].lang || 'en-US';
+            }
         }
 
         const box = document.getElementById('target-box');
-        const wordSpans = document.querySelectorAll('.word');
+        const wordSpans = cueRezim ? [] : document.querySelectorAll('.word');
         let wordIndex = 0;
 
         utterance.onstart = () => {
@@ -2397,8 +3089,15 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
         if (isTransitioning) return;
         const cur = sessionPhrases[currentIndex];
         if (cur && cur.isRule) return;
+        if (cur && cur._faza === 'pocuvaj' && cur._sub === 'vyber' && !cur._odkryte && trainingStep === 'sentence') { setFeedback('', 'Najprv vyber, čo veta znamená.'); return; }
         stopSpeaking();
 
+        if (useOwn()) {
+            if (own.state === 'busy') return;                       // práve vyhodnocuje
+            if (own.state === 'rec' && own.speechAt >= 0) { ownFinish('ťuknutie → koniec'); return; }
+            startListening(false);
+            return;
+        }
         if (!sttSupported || micFailed) {
             toggleKeyboardRow(true);
             return;
@@ -2620,6 +3319,9 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
         const targetWords = target.split(' ');
         const { targetMask, acc: pct } = bestMatch(targetWords, spoken);
         const missed = [];
+        item._odkryte = true;   // po odpovedi sa anglický text ukáže
+        document.querySelectorAll('.word.skryte').forEach(el => el.classList.remove('skryte'));
+        syncFaza();
 
         targetWords.forEach((w, i) => {
             const wordEl = document.getElementById(`word-${i}`);
@@ -2649,7 +3351,9 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
         logAttempt(pct);
         renderCoachInsight();
 
-        const r = gradeOnceFor(item, firstOk);
+        const samOk = firstOk && !item._pomoc && !item._lzle;   // s pomocou alebo po zlom výbere sa veta zajtra vráti
+        realZapis(item, samOk);
+        const r = gradeOnceFor(item, samOk);
 
         if (allWordsMatched) {
             decayWordFails(targetWords);
@@ -2898,6 +3602,20 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
         s.showOthers = document.getElementById('setting-others').checked;
         s.autoMic = document.getElementById('setting-automic').checked;
         s.wordRetry = document.getElementById('setting-wordretry').checked;
+        {
+            const b = document.getElementById('setting-bezcitania').checked;
+            if (b !== bezCitania()) { s.bezCitania = b; sessionPhrases.forEach(p => { if (!p.isRule && !p.isJustWord && !p._odkryte) { p._faza = null; p._sub = null; } }); }
+        }
+        {
+            const predOwn = useOwn(), predModel = ownModel();
+            const chce = document.getElementById('setting-ownstt').checked;
+            if (chce !== predOwn) s.ownStt = chce;
+            s.ownPresny = document.getElementById('setting-ownpresny').checked;
+            s.micKeep = document.getElementById('setting-mickeep').checked;
+            if (!s.micKeep) ownUvolni(true);
+            if (useOwn() !== predOwn || (useOwn() && ownModel() !== predModel)) setTimeout(ownPrepni, 0);
+            document.getElementById('setting-ownstt').checked = useOwn();
+        }
         const tr = {
             tense: document.getElementById('track-tense').checked,
             topic: document.getElementById('track-topic').checked,
@@ -2926,6 +3644,12 @@ if (typeof module !== 'undefined') module.exports = { rozhodniOpravu };
         document.getElementById('setting-others').checked = !!s.showOthers;
         document.getElementById('setting-automic').checked = s.autoMic !== false;
         document.getElementById('setting-wordretry').checked = s.wordRetry !== false;
+        document.getElementById('setting-bezcitania').checked = bezCitania();
+        renderPokrok();
+        document.getElementById('setting-ownstt').checked = useOwn();
+        document.getElementById('setting-ownstt').disabled = !ownMozne;
+        document.getElementById('setting-ownpresny').checked = !!s.ownPresny;
+        document.getElementById('setting-mickeep').checked = !!s.micKeep;
         document.getElementById('track-tense').checked = s.tracks.tense !== false;
         document.getElementById('track-topic').checked = s.tracks.topic !== false;
         document.getElementById('track-slang').checked = s.tracks.slang !== false;

@@ -1,6 +1,7 @@
 // QEN service worker: appka sa uloží do telefónu a beží aj bez internetu.
 // Stratégia "najprv sieť": ak je internet, dostaneš vždy najnovšiu verziu; ak nie, použije sa uložená kópia.
-const CACHE = 'qen-v9';
+const CACHE = 'qen-v13';
+const LIB_CACHE = 'qen-lib-v1';   // knižnica na rozpoznávanie reči (cdn.jsdelivr.net) – uložená natrvalo, aby šla aj bez internetu
 const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (e) => {
@@ -9,13 +10,21 @@ self.addEventListener('install', (e) => {
 
 self.addEventListener('activate', (e) => {
   e.waitUntil(
-    caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+    caches.keys().then((keys) => Promise.all(keys.filter((k) => /^qen-v\d+$/.test(k) && k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
 
 self.addEventListener('fetch', (e) => {
   const req = e.request;
+  if (req.method === 'GET' && new URL(req.url).hostname === 'cdn.jsdelivr.net') {
+    // verzia je v adrese, obsah sa nemení -> najprv uložená kópia
+    e.respondWith(caches.open(LIB_CACHE).then((c) => c.match(req.url).then((hit) => hit || fetch(req.url, { mode: 'cors', credentials: 'omit' }).then((res) => {
+      if (res && res.ok) c.put(req.url, res.clone());
+      return res;
+    }))));
+    return;
+  }
   if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
   e.respondWith(
     new Promise((resolve, reject) => {
